@@ -182,3 +182,51 @@ def test_tier_b_links_are_reverted_when_it_is_disabled(session: Session) -> None
     report = resolve(session, tier_b=False)
     assert report.outcomes["reverted:tier B"] == 1
     assert len(player_of(session, "Lee UNIQUE")) == 2
+
+
+def test_a_persons_undo_is_not_relinked_by_the_next_pass(session: Session) -> None:
+    play(session, T1, [row(side1=(("1", "Robin SAMPLE", "QA-1001"),))])
+    play(session, T2, [row(side1=(("9", "Robin SAMPLE", "QA-1001"),))], source=BA)
+    resolve(session)
+    robin = select(SourcePlayer.id).filter_by(display_name="Robin SAMPLE")
+    c = session.scalars(
+        select(IdentityCandidate).where(IdentityCandidate.source_player_a_id.in_(robin))
+    ).one()
+    assert c.decision_id is not None
+    identity.undo(session, c.decision_id, "wrong link", "human:tester")
+    resolve(session)
+    assert len(player_of(session, "Robin SAMPLE")) == 2
+
+
+def test_ids_equal_only_without_punctuation_need_the_same_name(session: Session) -> None:
+    play(session, T1, [row(side1=(("1", "Ann ONE", "1.2345"),))])
+    play(session, T2, [row(side1=(("9", "Ann TWO", "12.345"),))], source=BA)
+    resolve(session)
+    assert len(player_of(session, "Ann ONE") | player_of(session, "Ann TWO")) == 2
+
+
+def test_placeholder_member_ids_identify_nobody(session: Session) -> None:
+    play(session, T1, [row(side1=(("1", "Pat DASH", "-"),), side2=(("2", "Lou DASH", "-"),))])
+    keys = set(session.scalars(select(SourcePlayer.source_key).where(
+        SourcePlayer.display_name.in_(["Pat DASH", "Lou DASH"]))))  # fmt: skip
+    assert len(keys) == 2 and all(k.startswith("tplayer:") for k in keys)
+
+
+def test_a_link_is_refused_when_the_players_share_a_tournament(session: Session) -> None:
+    # Robin A (T1) and Robin B (T2) carry the same member id, but player B already holds a
+    # record from T1 through an earlier link: merging would put two entries in one tournament
+    robin, other = ("1", "Robin SAMPLE", "QA-1001"), ("5", "Other X", None)
+    play(session, T1, [row(side1=(robin,), side2=(other,))])
+    play(session, T2, [row(side1=(("9", "Robin SAMPLE", "QA-1001"),))], source=BA)
+    t1_other = session.scalars(select(SourcePlayer).filter_by(display_name="Other X")).one()
+    robin_b = session.scalars(
+        select(SourcePlayer).filter_by(display_name="Robin SAMPLE", source_id=BA)
+    ).one()
+    link_b = session.get(PlayerLink, robin_b.id)
+    link_other = session.get(PlayerLink, t1_other.id)
+    assert link_b and link_other
+    link_other.player_id = link_b.player_id  # as if a person had linked them
+    session.flush()
+    report = resolve(session)
+    assert report.outcomes["distinct"] >= 1
+    assert len(player_of(session, "Robin SAMPLE")) == 2

@@ -212,3 +212,18 @@ def test_renormalize_reapplies_rules_to_unchanged_records(session: Session) -> N
     assert (counts["unchanged"], counts["normalized"]) == (1, 1)
     assert session.scalars(select(Match.status)).one() == "completed"
     assert count(session, Match) == 1
+
+
+def test_a_changed_identifier_key_stops_ingest(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydantic import SecretStr
+
+    from scout.config import get_settings
+    from scout.ingest.tournamentsoftware import identifier_key
+
+    monkeypatch.setattr(get_settings(), "identifier_key", SecretStr("first"))
+    assert identifier_key(session) == "first"
+    monkeypatch.setattr(get_settings(), "identifier_key", SecretStr("second"))
+    with pytest.raises(RuntimeError, match="differs"):
+        identifier_key(session)

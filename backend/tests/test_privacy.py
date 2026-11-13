@@ -76,3 +76,19 @@ def test_national_identity_numbers_are_never_stored_in_clear() -> None:
     kept = minimise_h2h(url, "k") or ""
     assert cpf not in kept and "T2P1MemberID=QA1" in kept
     assert "T1P1MemberID" not in (minimise_h2h(url, None) or "")
+
+
+def test_head_to_head_links_without_national_ids_are_untouched() -> None:
+    from scout.privacy import minimise_h2h
+
+    url = "https://x/h2h?OrganizationCode=O&T1P1MemberID=AB%2012&T2P1MemberID=QA+1"
+    assert minimise_h2h(url, "k") == url  # byte for byte: re-encoding would split players
+
+
+@pytest.mark.parametrize("shape", ["12345678909", "880101-14-5678", "123.456.789-09"])
+def test_other_national_id_shapes_are_tokenised(shape: str) -> None:
+    from scout.privacy import minimise_identifier
+
+    token = minimise_identifier(shape, "k")
+    assert token and token.startswith("h-")
+    assert minimise_identifier("12345678909", "k") == minimise_identifier("123.456.789-09", "k")

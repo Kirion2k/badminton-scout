@@ -47,7 +47,7 @@ The owner has confirmed, twice, that BWF and Tournament Software authorised Badm
 
 ## Request budget (until the agreements' own terms are on file)
 
-Each authorised source: **at most 1 request per 5 s and 300 per day**, except `www.`, `ba.` and `bnz.tournamentsoftware.com`: **2,000 per day** from 2026-11-13 (owner instruction to grow coverage as fast as possible; same 5 s spacing). `SourceRights.min_interval_s` and `daily_budget` enforce this in `ApiAnythingProvider`. The daily count carries across ingest runs through `ingest_run.counts.requests`, and failed calls are charged for the runtime's hidden retries (ADR-0008 §4). A learning session (a handful of browser page loads, `docs/api-anything.md`) counts each page load against the same budget. **Requests used on 2026-11-12: about 50 for `ba.`** (discovery, learning, validation, imports, re-imports, two live-suite runs; each well under the 300 cap), **1 each** for `www.`, `bwf.tournamentsoftware.com` and `bwfbadminton.com`.
+Each authorised source: **at most 1 request per 5 s and 300 per day**, except the Tournament Software portals in `sources.py` (`www.`, `ba.` and every federation portal): **2,000 per day** from 2026-11-13 (owner instruction to grow coverage as fast as possible; same 5 s spacing). `SourceRights.min_interval_s` and `daily_budget` enforce this in `ApiAnythingProvider`. The daily count carries across ingest runs through `ingest_run.counts.requests`, and failed calls are charged for the runtime's hidden retries (ADR-0008 §4). A learning session (a handful of browser page loads, `docs/api-anything.md`) counts each page load against the same budget. **Requests used on 2026-11-12: about 50 for `ba.`** (discovery, learning, validation, imports, re-imports, two live-suite runs; each well under the 300 cap), **1 each** for `www.`, `bwf.tournamentsoftware.com` and `bwfbadminton.com`.
 
 ## Rules
 
@@ -68,3 +68,19 @@ Each authorised source: **at most 1 request per 5 s and 300 per day**, except `w
 Owner-attested 2026-11-13: Badminton New Zealand granted access to everything (all uses). Recorded
 in `sources.py` as `tournamentsoftware_bnz` and in ADR-0008 (2026-11-13 amendment). The agreement
 text is not yet on file.
+
+## Federation portals (owner-attested 2026-11-13; `TS_FEDERATION_PORTALS` in `sources.py`)
+
+| Source | Host | Basis | Consent wall | Validated |
+|---|---|---|---|---|
+| `tournamentsoftware_scotland` | `badmintonscotland.tournamentsoftware.com` | global federation attestation | yes | yes (partly login-only) |
+| `tournamentsoftware_dbv` | `dbv.turnier.de` | global federation attestation | yes | yes |
+| `tournamentsoftware_obv` | `obv.tournamentsoftware.com` | global federation attestation | yes | yes (later syncs imported matches) |
+| `tournamentsoftware_cbbd` | `cbbd.tournamentsoftware.com` | global federation attestation | yes | yes |
+| `tournamentsoftware_england` | `be.tournamentsoftware.com` | owner-supplied portal, global attestation | yes | yes |
+| `tournamentsoftware_canada` | `badmintoncanada.tournamentsoftware.com` | owner-supplied portal, global attestation | no | **no**: no match rows yet |
+| `tournamentsoftware_badvla` | `badvla.tournamentsoftware.com` | owner-supplied; Flanders explicitly approved | no | yes |
+
+As for every Tournament Software host, the robots exception (ADR-0008 §3) is owner-attested.
+It never covers logins, challenges or consent walls beyond the minimal consent. No agreement text
+is on file for any of them.

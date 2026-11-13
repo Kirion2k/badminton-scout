@@ -52,7 +52,8 @@ def test_merge_then_undo_restores_exact_links(session: Session) -> None:
     identity.undo(session, merge.id, "different people after all", "human:test")
     assert links(session) == original
     assert session.get(Player, gone).merged_into_id is None  # type: ignore[union-attr]
-    assert session.get(IdentityCandidate, candidate.id).status == "open"  # type: ignore[union-attr]
+    # a person's undo is final: the automatic resolver must not link the pair again (ADR-0011)
+    assert session.get(IdentityCandidate, candidate.id).status == "rejected"  # type: ignore[union-attr]
     actions = session.scalars(select(IdentityDecision.action).order_by(IdentityDecision.id)).all()
     assert actions[-2:] == ["merge", "split"]  # history kept, never edited
 

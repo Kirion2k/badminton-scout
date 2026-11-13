@@ -15,6 +15,7 @@ from scout.config import get_settings
 from scout.ingest.operations import TsMatchRow, TsTournament, ts_match_key, ts_tournament_key
 from scout.ingest.raw import content_hash, record_payload
 from scout.models import (
+    AppSetting,
     Event,
     Game,
     IdentityDecision,
@@ -29,7 +30,12 @@ from scout.models import (
     SourcePlayer,
     Tournament,
 )
-from scout.privacy import canonical_event, is_redistributable_event, minimise_h2h
+from scout.privacy import (
+    canonical_event,
+    is_redistributable_event,
+    key_fingerprint,
+    minimise_h2h,
+)
 from scout.sources import SOURCES
 
 Status = Literal["completed", "walkover", "retired", "disqualified", "winner_only", "not_played"]
@@ -121,9 +127,27 @@ def _player_refs(row: TsMatchRow, side: int, tournament: str) -> tuple[PlayerRef
     refs: list[PlayerRef] = []
     for position, (player_id, name) in enumerate(zip(ids, names, strict=True), start=1):
         member = _query(row.h2h or "", f"T{side}P{position}MemberID")
-        key = f"member:{org}/{member}" if org and member else f"tplayer:{tournament}/{player_id}"
+        # a placeholder member id ("-", "...") identifies nobody: tournament-scoped instead
+        real = member and re.search(r"[0-9A-Za-z]", urllib.parse.unquote_plus(member))
+        key = f"member:{org}/{member}" if org and real else f"tplayer:{tournament}/{player_id}"
         refs.append(PlayerRef(key.lower(), clean_name(name)))
     return tuple(refs)
+
+
+def identifier_key(session: Session) -> str | None:
+    """The configured identifier key, checked against the fingerprint stored the first time it
+    was used: a changed key would re-key every tokenised member and split their players."""
+    secret = get_settings().identifier_key
+    if secret is None:
+        return None
+    key = secret.get_secret_value()
+    stored = session.get(AppSetting, "identifier_key_fingerprint")
+    if stored is None:
+        session.add(AppSetting(name="identifier_key_fingerprint", value=key_fingerprint(key)))
+        session.flush()
+    elif stored.value != key_fingerprint(key):
+        raise RuntimeError("SCOUT_IDENTIFIER_KEY differs from the key used before: restore it")
+    return key
 
 
 def _duration_and_court(info: str | None) -> tuple[int | None, str | None]:
@@ -299,12 +323,13 @@ def ingest_rows(
     """
     counts: Counter[str] = Counter()
     by_key: dict[str, list[tuple[TsMatchRow, dict[str, Any]]]] = defaultdict(list)
-    secret = get_settings().identifier_key
-    key = secret.get_secret_value() if secret else None
+    key = identifier_key(session)
     for item, row in zip(items, rows, strict=True):
         # national-identity member ids never reach storage, in the payload or in a key
         minimal = minimise_h2h(row.get("h2h"), key)
         if minimal != row.get("h2h"):
+            if key is None:
+                counts["identifier_dropped"] += 1  # no key: kept out, at the cost of identity
             row = row | {"h2h": minimal}
             item = TsMatchRow.model_validate(row)
         by_key[ts_match_key(item)].append((item, row))

@@ -554,8 +554,6 @@ def _withhold(args: argparse.Namespace) -> int:
 def _minimise() -> int:
     """Rewrite stored payloads and player keys that hold national-identity member ids (no
     requests). Payload hashes are recomputed, so the next import sees no change."""
-    import re
-
     from sqlalchemy.orm import Session
 
     from scout.config import get_settings
@@ -571,21 +569,48 @@ def _minimise() -> int:
     key = secret.get_secret_value()
     revisions = players = 0
     with Session(get_engine()) as s:
+        taken = set(
+            s.execute(select(RawRecordRevision.raw_record_id, RawRecordRevision.content_sha256))
+            .tuples()
+            .all()
+        )
         for rev in s.scalars(
-            select(RawRecordRevision).where(RawRecordRevision.payload["h2h"].astext.op("~")(
-                r"MemberID=[^&]*\d{3}(\.|%2E)\d{3}"
-            ))
-        ):  # fmt: skip
+            select(RawRecordRevision).where(
+                RawRecordRevision.payload["h2h"].astext.like("%MemberID=%")
+            )
+        ):
             payload = dict(rev.payload)
-            payload["h2h"] = minimise_h2h(payload.get("h2h"), key)
-            rev.payload, rev.content_sha256 = payload, content_hash(payload)
+            minimal = minimise_h2h(payload.get("h2h"), key)
+            if minimal == payload.get("h2h"):
+                continue
+            payload["h2h"] = minimal
+            new_hash = content_hash(payload)
+            rev.payload = payload
+            # two revisions that differed only in this id now read the same: the identifier
+            # must still go, but one record cannot hold two revisions with one hash
+            if (rev.raw_record_id, new_hash) not in taken:
+                taken.discard((rev.raw_record_id, rev.content_sha256))
+                rev.content_sha256 = new_hash
+                taken.add((rev.raw_record_id, new_hash))
             revisions += 1
-        for sp in s.scalars(select(SourcePlayer).where(SourcePlayer.source_key.like("member:%"))):
+        members = list(
+            s.scalars(select(SourcePlayer).where(SourcePlayer.source_key.like("member:%")))
+        )
+        keys = {(sp.source_id, sp.source_key) for sp in members}
+        for sp in members:
             issuer, _, member = sp.source_key[len("member:") :].partition("/")
             minimal = minimise_identifier(member, key)
-            if minimal != member and minimal is not None and re.search(r"\d", member):
-                sp.source_key = f"member:{issuer}/{minimal}"
-                players += 1
+            if minimal == member or minimal is None:
+                continue
+            target = f"member:{issuer}/{minimal}"
+            if (sp.source_id, target) in keys:
+                # one number written two ways: the same person. A marked key keeps the records
+                # apart until identity resolution links them as a recorded decision (ADR-0011)
+                target = f"{target}~{sp.id}"
+            keys.discard((sp.source_id, sp.source_key))
+            keys.add((sp.source_id, target))
+            sp.source_key = target
+            players += 1
         s.commit()
     print(f"payloads rewritten: {revisions}; player keys rewritten: {players}")
     return 0
@@ -646,22 +671,23 @@ def _identity(args: argparse.Namespace) -> int:
                 s.commit()
                 rows = s.scalars(
                     select(IdentityCandidate)
-                    .filter_by(status="open")
+                    .where(IdentityCandidate.status.in_(["open", "deferred"]))
                     .order_by(IdentityCandidate.id)
                 ).all()
                 for c in rows:
                     a = s.get(SourcePlayer, c.source_player_a_id)
                     b = s.get(SourcePlayer, c.source_player_b_id)
                     if a and b:
-                        print(f"  #{c.id} {c.rule}: {a.display_name!r} ({a.source_key}) ~ "
-                              f"{b.display_name!r} ({b.source_key})")  # fmt: skip
-                print(f"open: {len(rows)}")
+                        print(f"  #{c.id} {c.status} {c.rule}: {a.display_name!r} "
+                              f"({a.source_key}) ~ {b.display_name!r} ({b.source_key})"
+                              f"{f' [{c.note}]' if c.note else ''}")  # fmt: skip
+                print(f"open or deferred: {len(rows)}")
             elif args.action == "merge":
-                d = identity.merge(s, args.id, args.reason, who)
+                d = identity.merge(s, args.id, args.reason, who, allow_deferred=True)
                 s.commit()
                 print(f"merged: decision {d.id} (undo with: scout identity undo {d.id})")
             elif args.action == "reject":
-                d = identity.reject(s, args.id, args.reason, who)
+                d = identity.reject(s, args.id, args.reason, who, allow_deferred=True)
                 s.commit()
                 print(f"rejected: decision {d.id}")
             else:

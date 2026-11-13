@@ -396,3 +396,12 @@ class PrivacyAction(Base):
     reason: Mapped[str] = mapped_column(Text)
     actor: Mapped[str] = mapped_column(Text)
     at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class AppSetting(Base):
+    """Small facts the system must remember about itself (e.g. the identifier key fingerprint)."""
+
+    __tablename__ = "app_setting"
+
+    name: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)

@@ -13,19 +13,30 @@ give tournament-scoped records (`tplayer:`).
 `scout identity resolve` (also run after every scheduled sync, offline) decides each open or
 deferred candidate:
 
-1. **Tier A, deterministic: linked.** The same issuer and the same member id, with case and
-   punctuation ignored, in any source.
-2. **Conflict: distinct.** Two records that played in the same tournament are two entries.
+1. **Tier A, deterministic: linked.** The same issuer and the exact same member id, with case,
+   percent-encoding and invisible characters ignored, in any source. Ids that are equal only
+   once punctuation is removed ("QA-1001" and "qa1001") also need the same name, because
+   "1.2345" and "12.345" must not link. Placeholder ids ("-", "...") count as no id.
+2. **Conflict: distinct.** Two records that played in the same tournament are two entries. This
+   is checked across every record of both players before any merge, and a pair already resolved
+   as distinct blocks other links between the same two players.
 3. **Tier B, corroborated: off.** It would link a record without a member id to a member when
    the names match exactly, the tournament's issuer is the member's issuer, the name is unique
    among that issuer's members, and the two share a doubles partner. It is enabled only when, on at
-   least 200 labelled negatives (different member ids, same name, same issuer), its evidence
-   would wrongly link at most 0.1% of them.
+   least 200 labelled negatives (different member ids, same name, same issuer), the **95% upper
+   bound** of its false-link rate is at most 0.1%. That takes about 3,000 negatives with no
+   error.
 4. **Everything else: deferred.** The records stay separate, the reason is recorded, and they are
    re-checked on every run. No candidate is generated twice (a unique pair constraint).
 
-Every link is an `IdentityDecision` by `auto:identity-resolver` and can be undone. A withheld player
-is never linked (ADR-0010).
+Every link is an `IdentityDecision` by `auto:identity-resolver` and can be undone.
+- **When a person undoes a link,** that is final: the candidate becomes `rejected` and is never
+  linked again automatically.
+- **People can still decide any open or deferred candidate** with `scout identity merge`, `reject`
+  and `undo`.
+- **A withheld player is never linked** (ADR-0010).
+- **One resolver runs at a time,** under a global advisory lock. A failure in resolution never
+  fails the sync that ran it.
 
 ## Evaluation (2026-11-13, real data)
 - **Tier B recall:** 63.4% on 12,444 same-member pairs (a shared partner in another tournament).

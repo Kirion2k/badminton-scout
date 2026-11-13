@@ -74,33 +74,60 @@ def is_adult_event(name: str, discipline: str | None) -> bool:
     return all(_ADULT_WORD.match(w) for w in words[1:])
 
 
-# One global rule for identifiers (ADR-0010 follow-up): a member id shaped like a national identity
-# number (Brazil's CPF, as used by cbbd.) is never stored in clear. A keyed hash keeps the same
-# person on the same key without the number itself; without a key the id is dropped.
-_NATIONAL_ID = re.compile(r"\d{3}\.\d{3}\.\d{3}-\d{2}")
+# One global rule for identifiers (ADR-0010 follow-up): a member id that may be a national identity
+# number is never stored in clear: Brazil's CPF and Malaysia's NRIC were seen (shapes below). A
+# keyed hash keeps the same person on the same key; without a key the id is dropped (and counted).
+_NATIONAL_ID = re.compile(r"(?<![0-9A-Za-z])\d[\d.\- ]{7,16}\d(?![0-9A-Za-z])")
+_INVISIBLE = re.compile(r"[\s\u00a0\u200b-\u200d\u2060\ufeff]+")
+
+
+def national_id(value: str) -> str | None:
+    """The digits of a possible national identity number in `value` (encoded or not), or None."""
+    decoded = _INVISIBLE.sub(" ", urllib.parse.unquote_plus(value)).strip()
+    found = _NATIONAL_ID.search(decoded)
+    if not found:
+        return None
+    digits = re.sub(r"\D", "", found.group())
+    # the formats seen: CPF (11 digits, written ddd.ddd.ddd-dd or bare) and NRIC (12 digits,
+    # dddddd-dd-dddd or bare). Other long member ids are ordinary association numbers.
+    shapes = r"\d{3}\.\d{3}\.\d{3}-\d{2}|\d{11}|\d{6}-\d{2}-\d{4}|\d{12}"
+    shaped = re.fullmatch(shapes, found.group())
+    return digits if shaped and found.group().strip() == decoded else None
 
 
 def minimise_identifier(value: str, key: str | None) -> str | None:
-    # found anywhere: sources wrap ids in invisible characters (zero-width or no-break spaces)
-    found = _NATIONAL_ID.search(urllib.parse.unquote(value))
-    if not found:
+    digits = national_id(value)
+    if digits is None:
         return value
     if not key:
         return None
-    return "h-" + hmac.new(key.encode(), found.group().encode(), hashlib.sha256).hexdigest()[:24]
+    # 11 digits hash in the CPF's written form, as the first stored tokens were (2026-11-13)
+    canonical = digits
+    if len(digits) == 11:
+        canonical = f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    return "h-" + hmac.new(key.encode(), canonical.encode(), hashlib.sha256).hexdigest()[:24]
+
+
+_MEMBER_PARAM = re.compile(r"([?&])(T\dP\dMemberID)=([^&#]*)")
 
 
 def minimise_h2h(url: str | None, key: str | None) -> str | None:
-    """The head-to-head link with national-identity member ids replaced (or removed)."""
+    """The head-to-head link with national-identity member ids replaced in place (or removed).
+    Anything else is returned byte for byte: re-encoding would change keys and revisions."""
     if not url or "MemberID=" not in url:
         return url
-    base, _, query = url.partition("?")
-    kept: list[tuple[str, str]] = []
-    for name, value in urllib.parse.parse_qsl(query, keep_blank_values=True):
-        if name.endswith("MemberID"):
-            minimal = minimise_identifier(value, key)
-            if minimal is None:
-                continue
-            value = minimal
-        kept.append((name, value))
-    return f"{base}?{urllib.parse.urlencode(kept)}"
+
+    def one(m: re.Match[str]) -> str:
+        minimal = minimise_identifier(m.group(3), key)
+        if minimal == m.group(3):
+            return m.group(0)
+        return "" if minimal is None else f"{m.group(1)}{m.group(2)}={minimal}"
+
+    out = _MEMBER_PARAM.sub(one, url)
+    return out if "?" in out or "?" not in url else out.replace("&", "?", 1)
+
+
+def key_fingerprint(key: str) -> str:
+    """Identifies the identifier key without revealing it: stored to catch a changed key."""
+    digest = hmac.new(key.encode(), b"badminton-scout identifier key", hashlib.sha256)
+    return digest.hexdigest()[:16]

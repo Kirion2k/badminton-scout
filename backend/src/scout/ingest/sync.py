@@ -141,7 +141,11 @@ def sync_provider(
         if run.status == "incomplete":
             run.note = "request budget used up: the next pass resumes the queue"
         if run.status != "failed":
-            counts += _resolve_identities(session)
+            try:
+                counts += _resolve_identities(session)
+            except Exception as e:  # the import itself succeeded: keep it, note the miss
+                session.rollback()
+                counts[f"identity:failed:{type(e).__name__}"] += 1
         return _finish(session, run, counts)
 
 

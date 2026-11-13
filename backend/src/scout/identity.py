@@ -160,6 +160,11 @@ def undo(session: Session, decision_id: int, reason: str, decided_by: str) -> Id
         select(IdentityCandidate).where(IdentityCandidate.decision_id == decision_id)
     )
     for c in reopened:
-        c.status, c.decision_id = "open", None
+        if decided_by.startswith("auto:"):
+            # the resolver withdrawing its own link: back to deferred, open to new evidence
+            c.status, c.decision_id, c.note = "deferred", None, "automatic link withdrawn"
+        else:
+            # a person undid it: final, or the next automatic pass would link it again
+            c.status, c.decision_id, c.note = "rejected", split.id, f"undone by a person: {reason}"
     session.flush()
     return split

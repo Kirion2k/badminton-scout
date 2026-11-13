@@ -13,12 +13,14 @@ Tiers, strictest first:
 Nothing here merges on a similarity score; every link is an IdentityDecision that `undo` reverts.
 """
 
+import math
 import re
+import urllib.parse
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -40,11 +42,21 @@ Verdict = Literal["link", "distinct", "defer"]
 
 
 def member_parts(source_key: str) -> tuple[str, str] | None:
-    """(issuer, normalised member id) of a member key; None for tournament-scoped records."""
+    """(issuer, exact member id) of a member key: percent-decoding, case and invisible characters
+    ignored, nothing else. None for tournament-scoped records and placeholder ids ("-")."""
     if not source_key.startswith("member:"):
         return None
     issuer, _, member = source_key[len("member:") :].partition("/")
-    return issuer.lower(), re.sub(r"[^0-9a-z]", "", member.lower())
+    exact = " ".join(re.sub(r"[\u00a0\u200b-\u200d\u2060\ufeff]", " ",
+                            urllib.parse.unquote_plus(member)).casefold().split())  # fmt: skip
+    exact = re.sub(r"~\d+$", "", exact)  # a duplicate marked by `scout privacy minimise`
+    return (issuer.lower(), exact) if re.search(r"[0-9a-z]", exact) else None
+
+
+def loose(member: str) -> str:
+    """Letters and digits only: "QA-1001" and "qa1001". Equal only this way, two ids need the same
+    name as well before they link ("1.2345" and "12.345" must not)."""
+    return re.sub(r"[^0-9a-z]", "", member)
 
 
 @dataclass
@@ -110,6 +122,8 @@ def classify(ev: Evidence, a: int, b: int, tier_b: bool) -> tuple[Verdict, str]:
     if pa and pb:
         if pa == pb:
             return "link", "tier A: same member id from the same issuer"
+        if pa[0] == pb[0] and loose(pa[1]) == loose(pb[1]) and ev.names[a] == ev.names[b]:
+            return "link", "tier A: same member id (written differently) and same name"
         return "defer", "different member ids: one person registered twice, or two people"
     known = pa or pb
     if known is not None and tier_b:
@@ -158,6 +172,17 @@ class Evaluation:
     def false_link_rate(self) -> float:
         return self.negatives_accepted / self.negatives if self.negatives else 1.0
 
+    @property
+    def false_link_upper_bound(self) -> float:
+        """95% Wilson upper bound: zero errors in 200 samples still allows about 1.9%."""
+        n = self.negatives
+        if not n:
+            return 1.0
+        p, z = self.false_link_rate, 1.96
+        centre = p + z * z / (2 * n)
+        spread = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+        return (centre + spread) / (1 + z * z / n)
+
 
 def evaluate(ev: Evidence) -> Evaluation:
     def partners(sp: int, skip: int | None = None) -> set[str]:
@@ -193,23 +218,30 @@ class Report:
 
 
 def resolve(session: Session) -> Report:
-    """Classify every open or deferred candidate; apply links and distinctions as decisions."""
+    """Classify every open or deferred candidate; apply links and distinctions as decisions.
+    One resolver at a time across all workers: concurrent merges would tangle undo history."""
+    if not session.scalar(text("SELECT pg_try_advisory_xact_lock(hashtext('scout-identity'))")):
+        return Report(Evaluation(0, 0, 0, 0), False, Counter({"skipped:another resolver": 1}))
     _cross_source_candidates(session)
     ev = gather(session)
     evaluation = evaluate(ev)
     tier_b = (
         evaluation.negatives >= TIER_B_MIN_SAMPLES
-        and evaluation.false_link_rate <= TIER_B_MAX_FALSE_LINK_RATE
+        and evaluation.false_link_upper_bound <= TIER_B_MAX_FALSE_LINK_RATE
     )
-    outcomes_reverted = 0 if tier_b else _revert_tier_b(session)
+    reverted, still_linked = (0, 0) if tier_b else _revert_tier_b(session)
     outcomes: Counter[str] = Counter()
-    if outcomes_reverted:
-        outcomes["reverted:tier B"] = outcomes_reverted
+    if reverted:
+        outcomes["reverted:tier B"] = reverted
+    if still_linked:
+        outcomes["tier B links kept (later decisions depend on them)"] = still_linked
     rows = session.scalars(
         select(IdentityCandidate).where(IdentityCandidate.status.in_(["open", "deferred"]))
     ).all()
     for c in rows:
         verdict, why = classify(ev, c.source_player_a_id, c.source_player_b_id, tier_b)
+        if verdict == "link" and (conflict := _player_conflict(session, ev, c)):
+            verdict, why = conflict
         if verdict == "link":
             try:
                 identity.merge(session, c.id, why, DECIDED_BY, allow_deferred=True)
@@ -228,12 +260,54 @@ def resolve(session: Session) -> Report:
     return Report(evaluation, tier_b, outcomes)
 
 
-def _revert_tier_b(session: Session) -> int:
+def _player_conflict(
+    session: Session, ev: Evidence, c: IdentityCandidate
+) -> tuple[Verdict, str] | None:
+    """A merge joins whole players, so check every record of both: one tournament in common means
+    two entries, and a pair someone resolved as distinct blocks the link."""
+    links = {
+        sp: p
+        for sp, p in session.execute(
+            select(PlayerLink.source_player_id, PlayerLink.player_id).where(
+                PlayerLink.player_id.in_(
+                    select(PlayerLink.player_id).where(
+                        PlayerLink.source_player_id.in_(
+                            [c.source_player_a_id, c.source_player_b_id]
+                        )
+                    )
+                )
+            )
+        )
+    }
+    pa, pb = links.get(c.source_player_a_id), links.get(c.source_player_b_id)
+    side_a = {sp for sp, p in links.items() if p == pa}
+    side_b = {sp for sp, p in links.items() if p == pb}
+    tournaments_a = {t for sp in side_a for t in ev.tournaments.get(sp, set())}
+    if any(ev.tournaments.get(sp, set()) & tournaments_a for sp in side_b):
+        return "distinct", "the two players' records share a tournament: two entries"
+    rejected = session.scalar(
+        select(IdentityCandidate.id).where(
+            IdentityCandidate.status == "rejected",
+            or_(
+                IdentityCandidate.source_player_a_id.in_(side_a)
+                & IdentityCandidate.source_player_b_id.in_(side_b),
+                IdentityCandidate.source_player_a_id.in_(side_b)
+                & IdentityCandidate.source_player_b_id.in_(side_a),
+            ),
+        )
+    )
+    if rejected is not None:
+        return "defer", "another pair between these players was resolved as distinct"
+    return None
+
+
+def _revert_tier_b(session: Session) -> tuple[int, int]:
     """Undo automatic Tier B links while Tier B is not validated (newest first, so each undo
-    restores the state its merge replaced). The candidates go back to being deferred."""
+    restores the state its merge replaced). Returns (reverted, kept because later decisions
+    depend on them); `undo` puts the candidates back to deferred."""
     from scout.models import IdentityDecision
 
-    reverted = 0
+    reverted = blocked = 0
     for d in session.scalars(
         select(IdentityDecision)
         .where(
@@ -243,15 +317,20 @@ def _revert_tier_b(session: Session) -> int:
         )
         .order_by(IdentityDecision.id.desc())
     ):
+        if session.scalar(
+            select(IdentityDecision.id).where(
+                IdentityDecision.action == "split", IdentityDecision.before == d.after
+            )
+        ):
+            continue  # already undone
         try:
             identity.undo(session, d.id, "tier B disabled: not validated", DECIDED_BY)
         except ValueError:
-            continue  # already undone, or a later decision built on it: left for a human
-        for c in session.scalars(select(IdentityCandidate).filter_by(decision_id=d.id)):
-            c.status, c.decision_id, c.note = "deferred", None, "tier B link reverted"
+            blocked += 1  # a later decision built on it: reported, left for a person
+            continue
         reverted += 1
     session.flush()
-    return reverted
+    return reverted, blocked
 
 
 def _cross_source_candidates(session: Session) -> None:
@@ -259,8 +338,8 @@ def _cross_source_candidates(session: Session) -> None:
     by_member: dict[tuple[str, str], list[int]] = defaultdict(list)
     for sp_id, key in session.execute(select(SourcePlayer.id, SourcePlayer.source_key)):
         parts = member_parts(key)
-        if parts and parts[1]:
-            by_member[parts].append(sp_id)
+        if parts:
+            by_member[(parts[0], loose(parts[1]))].append(sp_id)
     pairs = [
         {"source_player_a_id": a, "source_player_b_id": b, "rule": "same_member_id"}
         for ids in by_member.values()
