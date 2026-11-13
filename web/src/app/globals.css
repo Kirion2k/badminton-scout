@@ -48,33 +48,33 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Badminton Scout tokens (docs/design.md). One dark theme; text contrast checked to WCAG AA.
-   Surfaces lift by lightness, not by borders; lines are hairlines; lime is the only accent and
-   marks focus, selection and the one primary action on a page. */
+/* Badminton Scout tokens (docs/design.md): light editorial. Contrast checked against ivory, white
+   and the muted fill; lime is a fill and marker only, never text on ivory. */
 :root {
-  --background: #090e18;
-  --foreground: #e8ecf3;
-  --card: #0e1522; /* surface 1: panels, lists */
-  --card-foreground: #e8ecf3;
-  --popover: #121a29;
-  --popover-foreground: #e8ecf3;
+  --background: #f7f5f0;
+  --foreground: #121a26;
+  --card: #ffffff;
+  --card-foreground: #121a26;
+  --popover: #ffffff;
+  --popover-foreground: #121a26;
   --primary: #c6f432;
-  --primary-foreground: #0b1120;
-  --secondary: #172032; /* surface 2: controls, selected pills */
-  --secondary-foreground: #e8ecf3;
-  --muted: #131b2a; /* row hover */
-  --muted-foreground: #8d97aa; /* 6.4:1 on the background */
-  --accent: #172032;
-  --accent-foreground: #e8ecf3;
-  --destructive: #f87171;
-  --border: rgb(255 255 255 / 0.07); /* hairlines */
-  --input: rgb(255 255 255 / 0.09);
-  --ring: #c6f432;
-  --radius: 0.75rem;
-  --subtle: #808a9d; /* tertiary meta: 4.7:1 on surface 2, 5.6:1 on the background */
-  --win: #4ade80;
-  --loss: #f87171;
-  --neutral-status: #94a3b8;
+  --primary-foreground: #121a26;
+  --secondary: #efece4;
+  --secondary-foreground: #121a26;
+  --muted: #efece4;
+  --muted-foreground: #5b6472;
+  --accent: #efece4;
+  --accent-foreground: #121a26;
+  --destructive: #b42318;
+  --border: #e3dfd5;
+  --input: #d9d4c8;
+  --ring: #121a26;
+  --radius: 0.625rem;
+  --subtle: #626a77;
+  --accent-ink: #3f5a00;
+  --win: #1f7a3a;
+  --loss: #b42318;
+  --neutral-status: #5b6472;
 }
 
 @theme inline {
@@ -82,6 +82,8 @@
   --color-loss: var(--loss);
   --color-neutral-status: var(--neutral-status);
   --color-subtle: var(--subtle);
+  --color-accent-ink: var(--accent-ink);
+  --font-display: var(--font-newsreader);
 }
 
 @layer base {
@@ -89,13 +91,21 @@
     @apply border-border outline-ring/50;
   }
   html {
-    color-scheme: dark;
+    color-scheme: light;
+    /* keep focused or scrolled-to elements clear of the sticky mobile bar */
+    scroll-padding-top: 4.5rem;
+  }
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-top: 1rem;
+    }
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 15px;
+    touch-action: manipulation;
     font-feature-settings: "ss01", "cv11";
   }
-  /* figures line up in columns without the weight of a monospace face */
   .num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
@@ -104,14 +114,24 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      transition-duration: 0ms !important;
+    }
+  }
 }
 
 @layer components {
-  /* one shape for every form control: quiet fill, hairline, lime focus */
   .control {
-    @apply h-9 rounded-lg border border-input bg-white/[0.03] px-3 text-sm text-foreground transition-colors placeholder:text-subtle hover:border-white/15 focus-visible:border-transparent;
+    @apply h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-colors placeholder:text-subtle hover:border-foreground/30;
   }
   .label-quiet {
-    @apply text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase;
+    @apply text-[11px] font-medium tracking-[0.09em] text-muted-foreground uppercase;
+  }
+  .display {
+    font-family: var(--font-display), Georgia, serif;
+    letter-spacing: -0.015em;
   }
 }

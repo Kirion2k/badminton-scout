@@ -73,8 +73,15 @@ class OpponentRecord(PlayerRef):
     lost: int
 
 
+class DisciplineRecord(BaseModel):
+    discipline: str  # MS, WS, MD, WD, XD
+    won: int
+    lost: int  # decided matches only, as in Record
+
+
 class PlayerProfile(PlayerRef):
     record: Record
+    by_discipline: list[DisciplineRecord]  # most played first
     tournaments: int
     tournament_history: list[TournamentAppearance]  # newest first
     opponents: list[OpponentRecord]  # most played first, at most 10
@@ -218,6 +225,7 @@ class TournamentDetail(TournamentRef):
     end_date: date | None
     events: list[EventSummary]
     source: str
+    source_id: str
     import_state: ImportState | None
 
 
@@ -510,6 +518,19 @@ def player_profile(db: DB, player_id: int) -> PlayerProfile | RedirectResponse:
             lost=len(decided) - won,
             walkovers=sum(r.status == "walkover" for r in decided),
         ),
+        by_discipline=sorted(
+            (
+                DisciplineRecord(discipline=d, won=w, lost=n - w)
+                for d in {r.discipline for r in decided if r.discipline}
+                for n, w in [
+                    (
+                        sum(r.discipline == d for r in decided),
+                        sum(r.discipline == d and r.winner_side == r.side for r in decided),
+                    )
+                ]
+            ),
+            key=lambda x: -(x.won + x.lost),
+        ),
         tournaments=len(per_tournament),
         tournament_history=history,
         opponents=opponents,
@@ -632,6 +653,7 @@ def tournament_detail(db: DB, tournament_id: int) -> TournamentDetail:
         end_date=t.end_date,
         events=[EventSummary(name=n, discipline=d, matches=c) for n, d, c in events],
         source=source.attribution if source else t.source_id,
+        source_id=t.source_id,
         import_state=_import_states(db, [t]).get(t.id),
     )
 
@@ -658,6 +680,7 @@ def list_tournaments(
     location: Annotated[str | None, Query(min_length=2, max_length=100)] = None,
     source: str | None = Query(None, max_length=64),
     discipline: Literal["MS", "WS", "MD", "WD", "XD"] | None = None,
+    sort: Literal["newest", "oldest", "matches"] = "newest",
     limit: int = Query(25, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> TournamentPage:
@@ -692,7 +715,13 @@ def list_tournaments(
         query = query.where(Tournament.source_id == source)
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = db.execute(
-        query.order_by(Tournament.start_date.desc().nulls_last(), Tournament.id.desc())
+        query.order_by(
+            *{
+                "newest": (Tournament.start_date.desc().nulls_last(), Tournament.id.desc()),
+                "oldest": (Tournament.start_date.asc().nulls_last(), Tournament.id),
+                "matches": (visible.c.matches.desc(), Tournament.id.desc()),
+            }[sort]
+        )
         .limit(limit)
         .offset(offset)
     ).all()

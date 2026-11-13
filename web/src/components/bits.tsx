@@ -6,15 +6,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
   type Outcome,
+  formatDate,
   formatRetrieved,
   formatScore,
   resultLabel,
 } from "@/lib/format";
 
+// text on ivory with a hairline ring: a tinted fill would drop the text below 4.5:1
 const TONE = {
-  win: "bg-win/10 text-win",
-  loss: "bg-loss/10 text-loss",
-  neutral: "bg-neutral-status/10 text-neutral-status",
+  win: "text-win ring-1 ring-win/40",
+  loss: "text-loss ring-1 ring-loss/40",
+  neutral: "text-neutral-status ring-1 ring-neutral-status/40",
 };
 
 export function ResultBadge({
@@ -65,7 +67,7 @@ export function FormStrip({ results }: { results: ("won" | "lost")[] }) {
             title={r === "won" ? "Won" : "Lost"}
             className={cn(
               "num flex size-6 items-center justify-center rounded-sm text-[11px] font-semibold",
-              r === "won" ? "bg-win/15 text-win" : "bg-loss/15 text-loss",
+              r === "won" ? "bg-win text-white" : "bg-loss text-white",
             )}
           >
             {r === "won" ? "W" : "L"}
@@ -99,7 +101,7 @@ export function SourceNote({ children }: { children: ReactNode }) {
       <span aria-hidden>·</span>
       <Link
         href="/coverage"
-        className="underline decoration-white/20 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-current"
+        className="underline decoration-foreground/25 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-current"
       >
         About this data
       </Link>
@@ -145,7 +147,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        "min-w-0 rounded-xl bg-card ring-1 ring-white/[0.04]",
+        "min-w-0 rounded-[10px] bg-card ring-1 ring-border",
         className,
       )}
     >
@@ -182,7 +184,7 @@ export function RowsSkeleton({ rows = 6 }: { rows?: number }) {
       {Array.from({ length: rows }, (_, i) => (
         <Skeleton
           key={i}
-          className="h-10 w-full rounded-lg bg-white/[0.04]"
+          className="h-10 w-full rounded-lg bg-muted"
           style={{ opacity: 1 - i * (0.6 / rows) }}
         />
       ))}
@@ -200,9 +202,9 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="space-y-3 pb-8">
+    <div className="space-y-4 pb-10">
       {eyebrow && <p className="label-quiet">{eyebrow}</p>}
-      <h1 className="max-w-4xl text-[26px] leading-[1.15] font-semibold tracking-[-0.02em] text-balance sm:text-[32px]">
+      <h1 className="display max-w-4xl text-[32px] leading-[1.08] font-semibold text-balance sm:text-[44px]">
         {title}
       </h1>
       {children}
@@ -232,7 +234,7 @@ export function MetaItem({
     <li className="flex min-w-0 items-center gap-2">
       <Icon aria-hidden className="size-4 shrink-0 text-subtle" />
       <span className="sr-only">{label}: </span>
-      <span className="min-w-0 truncate text-foreground/90">{children}</span>
+      <span className="min-w-0 truncate text-foreground">{children}</span>
     </li>
   );
 }
@@ -270,8 +272,8 @@ export function PillLink({
       className={cn(
         "relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] whitespace-nowrap transition-colors",
         selected
-          ? "bg-secondary text-foreground ring-1 ring-primary/50"
-          : "text-muted-foreground ring-1 ring-white/[0.07] hover:bg-white/[0.04] hover:text-foreground",
+          ? "bg-foreground text-background"
+          : "text-muted-foreground ring-1 ring-border hover:bg-muted hover:text-foreground",
       )}
     >
       {children}
@@ -281,7 +283,45 @@ export function PillLink({
 
 /** The quiet secondary button: filters, pagination. */
 export const BUTTON_QUIET =
-  "inline-flex h-9 items-center justify-center rounded-lg bg-white/[0.06] px-4 text-sm font-medium text-foreground ring-1 ring-white/[0.06] transition-colors hover:bg-white/[0.1]";
+  "inline-flex h-10 items-center justify-center rounded-lg bg-card px-4 text-sm font-medium text-foreground ring-1 ring-input transition-colors hover:bg-muted";
+
+/** A page section: a serif heading and an optional link, separated by a rule, not a box. */
+export function Section({
+  title,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn("min-w-0", className)}>
+      <div className="flex items-baseline justify-between gap-4 border-b border-foreground/80 pb-2">
+        <h2 className="display text-[22px] font-semibold">{title}</h2>
+        {action && <div className="text-[13px]">{action}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A big serif figure with its label: real counts only. */
+export function Stat({ value, label }: { value: ReactNode; label: string }) {
+  return (
+    <div>
+      <p className="display num text-[34px] leading-none font-semibold">
+        {value}
+      </p>
+      <p className="mt-1.5 text-[13px] text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+export const LINK =
+  "underline decoration-foreground/25 underline-offset-[3px] transition-colors hover:decoration-foreground";
 
 /** Links to the previous/next page, keeping every other query parameter. */
 export function Pager({
@@ -310,7 +350,7 @@ export function Pager({
   return (
     <nav
       aria-label="Pages"
-      className="flex items-center justify-between gap-4 border-t border-white/[0.05] px-5 py-3.5 text-[13px]"
+      className="flex items-center justify-between gap-4 border-t px-5 py-3.5 text-[13px]"
     >
       <span className="num text-subtle">
         Page {page} of {pages} · {total.toLocaleString("en-AU")} total
@@ -328,5 +368,30 @@ export function Pager({
         ) : null}
       </span>
     </nav>
+  );
+}
+
+/** A calendar-style date: big day, small month and year. Screen readers get the full date. */
+export function DateBlock({ iso }: { iso: string | null | undefined }) {
+  if (!iso)
+    return <span className="text-[13px] text-subtle">Date not recorded</span>;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return (
+    <span className="flex flex-col leading-none">
+      <span aria-hidden className="display num text-[28px] font-semibold">
+        {d.getUTCDate()}
+      </span>
+      <span
+        aria-hidden
+        className="mt-1 text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase"
+      >
+        {d.toLocaleDateString("en-AU", {
+          month: "short",
+          year: "numeric",
+          timeZone: "UTC",
+        })}
+      </span>
+      <span className="sr-only">{formatDate(iso)}</span>
+    </span>
   );
 }

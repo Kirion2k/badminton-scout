@@ -346,3 +346,22 @@ async def test_a_merge_cannot_expose_a_withheld_player(
     sam.merged_into_id = alex.id
     data.flush()
     assert (await api.get(f"/v1/players/{sam.id}")).status_code == 404
+
+
+async def test_profile_record_by_discipline_counts_decided_matches(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    body = (await api.get(f"/v1/players/{player_id(data, 'Alex TESTER')}")).json()
+    by = {d["discipline"]: (d["won"], d["lost"]) for d in body["by_discipline"]}
+    assert sum(w + lo for w, lo in by.values()) == body["record"]["played"]
+    assert sum(w for w, _ in by.values()) == body["record"]["won"]
+
+
+async def test_tournament_list_sorting(api: httpx.AsyncClient) -> None:
+    def ids(body: dict[str, list[dict[str, int]]]) -> list[int]:
+        return [t["id"] for t in body["items"]]
+
+    newest = ids((await api.get("/v1/tournaments")).json())
+    oldest = ids((await api.get("/v1/tournaments", params={"sort": "oldest"})).json())
+    assert oldest == list(reversed(newest))
+    assert (await api.get("/v1/tournaments", params={"sort": "nope"})).status_code == 422

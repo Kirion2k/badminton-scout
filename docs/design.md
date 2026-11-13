@@ -1,60 +1,88 @@
-# Badminton Scout: design specification (M3)
+# Badminton Scout design system (M4, light editorial)
 
-A data product first: dense, calm and exact. A screen earns its space with real records, never filler.
+**Direction chosen:** *Editorial sports intelligence*: light, typography-led, quiet. This is the
+second of two directions explored with the UI/UX Pro Max skill (`--design-system`).
 
-## Navigation
-- A slim top bar: wordmark on the left; **Discover**, **Tournaments**, **Coverage** on the right; a compact search field on every page except Discover, which *is* search.
-- URLs are the state: `/?q=`, `/players/{id}?discipline=&tournament=&year=&result=&page=`, `/tournaments?q=&page=`, `/tournaments/{id}?event=&page=`, `/coverage`. Back/forward and sharing just work, and server rendering needs no client state.
-- Canonical player URLs: a merged player's old URL redirects to the surviving one (the API answers 308; under streaming the page redirects client-side, see the last section).
+- **A, "Vibrant & Block-based":** Bebas Neue, red. Rejected: loud fan-site energy, wrong for a
+  data product.
+- **B, "Minimalism & Swiss Style":** Fira Code, corporate blue. Its structure was kept, its
+  palette and type were not.
 
-## Layout
-- Content max width 1200 px, 24 px gutters (16 px under 640 px).
-- A page has a **header band** (title, one line of context, provenance), then its main content.
-- Profile: a header with the record summary; then a two-column grid at ≥ 1024 px (match history 2/3, side panel 1/3 with tournaments and opponents), a single column below that.
+The chosen result takes B's grid discipline, adds the skill's "News Editorial" pairing (a
+Newsreader serif for display), and uses the owner's palette. The Benji Taylor evaluation of the
+previous dark UI found the main gap was identity and delight; the structural changes below answer
+that. Brandkit's "Light Editorial" mode set the brand strategy.
 
-## Typography
-- **Geist Sans** for everything, with tabular figures (`.num`) for scores, dates and counts. Mono was dropped in the 2026-11-13 refinement because it made the data the loudest thing on the page.
-- Scale: page title 32 px (26 px on phones), tracking −0.02em; row titles 15 px; body 14 px; meta 13 px; small 12 px; labels 11 px, uppercase, tracking 0.08em (`.label-quiet`).
+## Brand
+- **Promise:** every match, traced to its source.
+- **Mark:** a lime disc holding a cork circle and three fanned feather strokes (the shuttle's
+  flight). It is used for the favicon, the sidebar and the badge.
+- **Wordmark:** "Badminton Scout" in Newsreader semibold.
+- **Tagline:** *Every match, traced.*
 
-## Surfaces, spacing, shape
-- Surfaces lift by lightness, not by borders: page `--background`, panels `--card` with a 4 % white ring, controls and selected pills `--secondary`. Separators are 5–7 % white hairlines, and rows inside a panel are separated by space and a hover fill, not by lines.
-- Spacing on a 4 px grid. Page top padding 40–56 px, header band to content 32 px, filter bar to results 20 px, list rows 14 px vertical padding.
-- Radius: panels 12 px, rows and controls 8 px, pills full.
-- One control shape (`.control`): 36 px tall, quiet white fill, hairline border, lime focus ring. Selects are native, so keyboards and phone pickers work.
-- Lime marks only: focus, the active nav item (a 1 px underline), the selected pill, the winner dot. Routine buttons (Apply, Show, Previous/Next) are quiet; the lime button is reserved for Discover's search.
-
-## Colour tokens (dark first; `:root` in `globals.css`)
+## Tokens (`web/src/app/globals.css`)
 | Token | Value | Use |
 |---|---|---|
-| `--background` | `#090e18` | page |
-| `--card` | `#0e1522` | surface 1: panels, lists |
-| `--secondary` | `#172032` | surface 2: controls, selected pills |
-| `--border` | white 7 % | hairlines |
-| `--foreground` | `#e8ecf3` | primary text |
-| `--muted-foreground` | `#8d97aa` | secondary text (5.5:1 or better on every surface) |
-| `--subtle` | `#808a9d` | tertiary meta: dates under rounds, counts (4.7:1 or better) |
-| `--primary` | `#c6f432` (shuttle lime) | the one accent |
-| `--win` / `--loss` | `#4ade80` / `#f87171` | won / lost |
-| `--neutral-status` | `#94a3b8` | walkover, retired, not played: never painted as a win or a loss |
+| `--background` | `#f7f5f0` warm ivory | page |
+| `--card` | `#ffffff` | the few raised surfaces (search, scoreboards) |
+| `--muted` | `#efece4` | hover fills, quiet chips |
+| `--foreground` | `#121a26` ink | text, 16:1 |
+| `--muted-foreground` | `#5b6472` | secondary text, 5.1:1 or better |
+| `--subtle` | `#626a77` | tertiary meta, 4.6:1 on every surface |
+| `--border` | `#e3dfd5` | hairlines |
+| `--primary` | `#c6f432` shuttle lime | fills and markers only, never text on ivory |
+| `--primary-foreground` | `#121a26` | text on lime |
+| `--accent-ink` | `#3f5a00` | lime-family text: links on hover, winner marks (7:1) |
+| `--win` / `--loss` | `#1f7a3a` / `#b42318` | won / lost text (4.6:1 and 5.6:1 or better) |
 
-Contrast: every text pair is at least 4.5:1 (axe runs in the e2e suite), and lime on navy is 13:1. Colour never carries meaning alone: results show **W**/**L** letters, statuses show words, the winner dot has a screen-reader "(winner)".
+- **Type:** Newsreader for display (page titles, section heads, big numbers); Geist Sans for the
+  interface; tabular figures for every number.
+- **Scale:** display 44/36/28 px, headings 20/17 px, body 15 px, meta 13 px, labels 11 px
+  uppercase.
+- **Radius:** 10 px on surfaces, 8 px on controls, full on chips.
+- **Rules:** dividers are 1 px `--border`, not boxes. Sections are separated by space and a
+  serif heading. Shadows only on the search field and on scoreboards (one soft shadow).
 
-## Components (shadcn/ui, restyled with the tokens)
-- **SearchBox**: a GET form, so it works without JavaScript. Autofocused on Discover. `/` focuses it from anywhere.
-- **ResultBadge**: W / L / W/O / Ret. / Not played. A walkover or retirement keeps its W or L, but is marked.
-- **Score**: games as `21–15 · 21–18`, the viewed player's points first. On a tournament page a match is a two-line scoreboard: each side on its own line, one aligned column per game, the won game in bold, a lime dot before the winners.
-- **Lists**: card/table hybrid rows. The title leads, the organiser and meta are quieter, and the whole row is the hit area (a stretched link, so only the title is a tab stop). Tournament matches are grouped by event under a quiet subheading.
-- **PillLink / Select / MetaRow / SourceNote**: event pills, the native select, icon + text meta lines, and the quiet source line (`components/bits.tsx`).
-- **MatchTable**: date · tournament · event · round · opponent(s) · score · result. Rows are links. On mobile each row becomes a two-line card.
-- **FormStrip**: the last 10 decided results as W/L squares, oldest to newest. Undecided matches are left out, not counted as losses.
-- **Provenance**: "Badminton Australia via Tournament Software · retrieved 12 Nov 2026" under every header that shows data.
-- **Empty / Loading / Error**: skeleton rows the size of the real rows. Empty states say what was searched and what to try. Errors say what failed and offer a retry, never an internal message.
+## Structure (what changed, not just how it looks)
+- **Shell.** A **left sidebar** at ≥ 1024 px holds the mark and wordmark, the global player search,
+  the sections (Discover, Tournaments, Coverage) and a live **data freshness** footer (last sync,
+  next sync). Below 1024 px there is a top bar with the wordmark and search, and a bottom tab bar
+  with the same three sections.
+- **Discover.** An editorial hero: a serif headline with the live tournament, match and player
+  counts, and one large search. Below it, *Federations* is a typographic index of real public
+  coverage per federation (country, tournaments, matches), each row linking to its filtered list;
+  then *Latest results*, recent tournaments with a date column.
+- **Tournaments.** A **filter rail** (name, federation with live counts, year, discipline) beside a
+  **results workspace** sorted by the chosen order. Rows are grouped under month headings, with a
+  date block, the title, the federation and country, place, completeness and counts.
+- **Tournament detail.** A header (federation kicker, serif title, a dates / place / organiser /
+  size line, provenance, completeness note). Below it, a **sticky event navigator** groups events
+  by discipline, and the **match workspace** shows matches grouped by round when one event is
+  selected, or by event when all are. Matches are scoreboards.
+- **Player profile.** An identity header (serif name, record W–L, matches, active span,
+  last-10 form). Then **results by discipline** (computed from decided matches only), the match
+  history with compact filters, and a side rail with tournaments and frequent opponents.
+- **Coverage.** A hero sentence of real totals; a **federation ledger** with status, public
+  tournaments and matches, span and last sync; pending providers (BWF) with the exact dependency;
+  then the limitations. National coverage is never implied: each row says "N tournaments".
 
-## Responsive behaviour
-- ≥ 1024 px: the profile's two-column layout. 768–1023 px: one column, and the header shows the compact search. < 768 px: stacked match rows (score and result on their own line), wrapping filters, and the three nav links stay visible (they fit, so no menu button). The header's search is hidden on phones; Discover is one tap away.
+## Rules carried over
+- No fabricated numbers: no rankings, Elo or age, and nothing without a source.
+- Colour never carries meaning alone: W and L letters, words for statuses, "Score unavailable"
+  written out.
+- Every page answers "where is this from?" within a glance (provenance line).
+- Accessibility: axe passes in e2e, there is a skip link, focus is visible (an ink outline on
+  ivory), touch targets are ≥ 44 px on mobile, and reduced motion is respected (motion is limited
+  to 150 ms colour transitions).
 
-## What we never show
-Fabricated numbers: no rankings, Elo, age, country or "form score" without a source. Junior and para events are published by owner decision (ADR-0010). If that is reversed, the API filters them; the frontend never does.
+## Responsive
+- **≥ 1280 px:** sidebar, two-column workspaces.
+- **1024–1279 px:** sidebar, single-column workspaces with the rail below.
+- **< 1024 px:** top bar plus bottom tabs; filters collapse into a disclosure; scoreboards stay
+  two-line.
+- No horizontal page scroll at any width (tested at 390 px).
 
 ## Status codes under streaming (Next.js 16 Cache Components)
-Pages stream a prerendered shell before their data, so the HTTP status is `200` before the API is asked. A record that turns out missing *or restricted* renders the same generic "Nothing here" page, and Next.js injects `<meta name="robots" content="noindex">`. A merged player's redirect becomes a client-side redirect to the canonical URL. We accept this documented model (`node_modules/next/dist/docs/01-app/02-guides/streaming.md`, "Status codes") rather than adding an API lookup before every page. The privacy property, an identical response for restricted and non-existent records, is tested end to end.
+With Cache Components the shell streams first, so a `notFound()` inside a Suspense boundary
+renders the not-found UI with HTTP 200 and an injected `noindex`. That's documented behaviour
+(`guides/streaming`, "Status codes"). Restricted and unknown records show the same generic page.

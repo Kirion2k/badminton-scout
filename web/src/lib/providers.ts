@@ -23,18 +23,42 @@ export const SYNC_STATUS: Record<string, string> = {
   skipped: "skipped: another run was active",
 };
 
-// Short provider names for tournament rows and filters, keyed by source id.
-export const PROVIDER_LABEL: Record<string, string> = {
-  tournamentsoftware_ba: "Badminton Australia",
-  tournamentsoftware_bnz: "Badminton New Zealand",
-  tournamentsoftware_scotland: "Badminton Scotland",
-  tournamentsoftware_dbv: "Germany (DBV)",
-  tournamentsoftware_obv: "Austria (ÖBV)",
-  tournamentsoftware_cbbd: "Brazil (CBBd)",
-  tournamentsoftware: "Tournament Software (global)",
-  tournamentsoftware_bwf: "BWF (Tournament Software)",
-  bwf: "BWF",
+// Each source's federation and the country it governs. A tournament's place is its own field:
+// the global portal hosts tournaments from many countries, so it has no single country.
+export const FEDERATION: Record<
+  string,
+  { label: string; country: string | null }
+> = {
+  tournamentsoftware_ba: { label: "Badminton Australia", country: "Australia" },
+  tournamentsoftware_bnz: {
+    label: "Badminton New Zealand",
+    country: "New Zealand",
+  },
+  tournamentsoftware_scotland: {
+    label: "Badminton Scotland",
+    country: "Scotland",
+  },
+  tournamentsoftware_dbv: {
+    label: "Deutscher Badminton-Verband",
+    country: "Germany",
+  },
+  tournamentsoftware_obv: {
+    label: "Österreichischer Badmintonverband",
+    country: "Austria",
+  },
+  tournamentsoftware_cbbd: {
+    label: "Confederação Brasileira de Badminton",
+    country: "Brazil",
+  },
+  tournamentsoftware: { label: "Tournament Software (global)", country: null },
+  tournamentsoftware_bwf: { label: "BWF (Tournament Software)", country: null },
+  bwf: { label: "BWF", country: null },
 };
+
+// Short labels for rows and filters, keyed by source id.
+export const PROVIDER_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(FEDERATION).map(([id, f]) => [id, f.country ?? f.label]),
+);
 
 export type ImportState = NonNullable<
   Schemas["TournamentSummary"]["import_state"]

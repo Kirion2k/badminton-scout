@@ -26,7 +26,7 @@ test("discover → search → profile → match → tournament → another playe
     page.getByRole("heading", { level: 1, name: "Alex TESTER" }),
   ).toBeVisible();
   // decided matches only: the cancelled match is neither won nor lost
-  await expect(page.locator('dt:text-is("Record") + dd')).toHaveText("4 – 2");
+  await expect(page.locator('dt:text-is("Record") + dd')).toHaveText("4–2");
 
   const history = page.getByRole("list", { name: "Matches, newest first" });
   await expect(
@@ -135,7 +135,7 @@ test("coverage explains sources and freshness", async ({ page }) => {
     page.getByRole("heading", { level: 1, name: "Data coverage" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: /Badminton Australia/ }).first(),
+    page.getByRole("heading", { level: 3, name: "Australia" }),
   ).toBeVisible();
   // the fixture's data is synthetic, so no provider has imported anything: statuses say so
   await expect(page.getByText("Partially validated").first()).toBeVisible();
@@ -143,8 +143,8 @@ test("coverage explains sources and freshness", async ({ page }) => {
     page.getByText("Pending technical access").first(),
   ).toBeVisible();
   // the fixture has never been synced: freshness says so instead of inventing a time
-  await expect(page.getByText("No sync has run yet")).toBeVisible();
-  await expect(page.getByText("No schedule configured")).toBeVisible();
+  await expect(page.locator("#main").getByText("No sync has run yet")).toBeVisible();
+  await expect(page.locator("#main").getByText("No schedule configured")).toBeVisible();
 });
 
 test("out-of-range parameters degrade gracefully instead of erroring", async ({

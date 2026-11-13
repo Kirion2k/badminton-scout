@@ -1,228 +1,223 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { Fact, Panel, PageHeader, RowsSkeleton } from "@/components/bits";
+import { RowsSkeleton, Section, Stat } from "@/components/bits";
 import { Shell } from "@/components/shell";
-import { api } from "@/lib/api/client";
-import {
-  formatDate,
-  formatMoment,
-  formatNextSync,
-  formatRetrieved,
-} from "@/lib/format";
-import { PROVIDER_STATUS, SYNC_STATUS } from "@/lib/providers";
+import { type Coverage, api } from "@/lib/api/client";
+import { formatDate, formatMoment, formatNextSync } from "@/lib/format";
+import { FEDERATION, PROVIDER_STATUS, SYNC_STATUS } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Data coverage" };
 
 const TONE = {
-  good: "border-win/40 text-win",
-  partial: "border-primary/40 text-primary",
-  waiting: "border-neutral-status/40 text-neutral-status",
-  bad: "border-loss/40 text-loss",
+  good: "text-win ring-1 ring-win/40",
+  partial: "bg-muted text-foreground",
+  waiting: "bg-muted text-muted-foreground",
+  bad: "text-loss ring-1 ring-loss/40",
 };
 
 export default function CoveragePage() {
   return (
     <Shell>
-      <PageHeader title="Data coverage">
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Where every record comes from, how fresh it is, and what is
-          deliberately left out.
+      <header className="pb-10">
+        <p className="label-quiet">Coverage</p>
+        <h1 className="display mt-4 max-w-3xl text-[32px] leading-[1.08] font-semibold text-balance sm:text-[44px]">
+          Data coverage
+        </h1>
+        <p className="mt-4 max-w-2xl text-[16px] text-muted-foreground">
+          Where every record comes from, how fresh it is, and what is not yet
+          covered. A federation listed here means some of its tournaments are
+          imported, not all of them.
         </p>
-      </PageHeader>
-      <div className="space-y-6">
-        <Suspense fallback={<RowsSkeleton rows={4} />}>
-          <Providers />
-        </Suspense>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Panel title="How players are identified">
-            <div className="space-y-2 p-4 text-sm text-muted-foreground">
-              <p>
-                Each source’s own player identifier is kept as received. A
-                player is never merged with another just because their names
-                match.
-              </p>
-              <p>
-                Possible duplicates are listed for a person to review. Every
-                merge is recorded and can be undone, and an old player link then
-                leads to the merged profile.
-              </p>
-            </div>
-          </Panel>
-          <Panel title="Sourced versus calculated">
-            <div className="space-y-2 p-4 text-sm text-muted-foreground">
-              <p>
-                <span className="text-foreground">Sourced, as published:</span>{" "}
-                names, tournaments, dates, events, rounds, scores, walkovers,
-                retirements, courts and durations.
-              </p>
-              <p>
-                <span className="text-foreground">Calculated here:</span>{" "}
-                win–loss records, head-to-head counts and recent form, from
-                decided matches only. A cancelled or unplayed match is never
-                counted as a win or a loss. There are no rankings or ratings
-                yet.
-              </p>
-            </div>
-          </Panel>
-        </div>
-      </div>
+      </header>
+      <Suspense fallback={<RowsSkeleton rows={6} />}>
+        <Ledger />
+      </Suspense>
     </Shell>
   );
 }
 
-async function Providers() {
-  const coverage = await api.coverage();
+async function Ledger() {
+  const c = await api.coverage();
   return (
-    <>
-      <Panel title="Data freshness">
-        <dl className="grid grid-cols-2 gap-4 p-4 text-sm md:grid-cols-4">
-          <Fact term="Last successful sync">
-            {formatMoment(coverage.last_sync_at) ?? "No sync has run yet"}
-          </Fact>
-          <Fact term="Next scheduled sync">
-            {formatNextSync(coverage.next_sync_at)}
-          </Fact>
-          <Fact term="Public tournaments">
-            <span className="num">
-              {coverage.public_tournaments.toLocaleString("en-AU")}
-            </span>
-          </Fact>
-          <Fact term="Awaiting import">
-            <span className="num">
-              {coverage.awaiting_import.toLocaleString("en-AU")}
-            </span>
-          </Fact>
+    <div className="space-y-16">
+      <dl className="grid grid-cols-2 gap-x-10 gap-y-8 border-y py-8 md:grid-cols-4">
+        {[
+          [c.public_tournaments, "public tournaments"],
+          [c.public_matches, "public matches"],
+          [c.public_players, "players"],
+          [c.awaiting_import, "tournaments awaiting import"],
+        ].map(([value, label]) => (
+          <div key={label}>
+            <dt className="sr-only">{label}</dt>
+            <dd>
+              <Stat
+                value={Number(value).toLocaleString("en-AU")}
+                label={String(label)}
+              />
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <Section title="Data freshness">
+        <dl className="grid gap-6 pt-5 sm:grid-cols-2">
+          <div>
+            <dt className="label-quiet">Last successful sync</dt>
+            <dd className="mt-1.5 text-[16px]">
+              {formatMoment(c.last_sync_at) ?? "No sync has run yet"}
+            </dd>
+          </div>
+          <div>
+            <dt className="label-quiet">Next scheduled sync</dt>
+            <dd className="mt-1.5 text-[16px]">
+              {formatNextSync(c.next_sync_at)}
+            </dd>
+          </div>
         </dl>
-        <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-          A scheduled job imports new and updated results within each provider’s
-          daily request allowance. Pages read our database only; they never
-          contact the providers. Awaiting import counts listings, not results.
+        <p className="mt-4 max-w-2xl text-[14px] text-muted-foreground">
+          A scheduled job imports new and corrected results within each
+          provider’s daily request allowance. Pages read our database only; they
+          never contact the providers. Awaiting import counts listings, not
+          results.
         </p>
-      </Panel>
-      <Panel title="Providers">
-        <div
-          className="overflow-x-auto"
-          tabIndex={0}
-          role="region"
-          aria-label="Providers table"
-        >
-          <table className="w-full text-sm">
-            <caption className="sr-only">
-              Data providers, their connection status and what each contributes
-            </caption>
-            <thead className="border-b text-left text-xs text-muted-foreground uppercase">
-              <tr>
-                <th scope="col" className="px-4 py-2.5 font-medium">
-                  Provider
-                </th>
-                <th scope="col" className="px-4 py-2.5 font-medium">
-                  Status
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-2.5 text-right font-medium"
-                  title="Listed by the provider: not a claim that results exist"
-                >
-                  Discovered
-                </th>
-                <th scope="col" className="px-4 py-2.5 text-right font-medium">
-                  Public
-                </th>
-                <th scope="col" className="px-4 py-2.5 text-right font-medium">
-                  Public matches
-                </th>
-                <th
-                  scope="col"
-                  className="hidden px-4 py-2.5 font-medium md:table-cell"
-                >
-                  Sync
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {coverage.providers.map((p) => {
-                const status = PROVIDER_STATUS[p.status];
-                return (
-                  <tr key={p.source_id} className="align-top">
-                    <td className="px-4 py-3">
-                      <span className="font-medium">{p.name}</span>
-                      <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                        {p.limitations.map((l) => (
-                          <li key={l}>{l}</li>
-                        ))}
-                      </ul>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "rounded border px-1.5 py-0.5 text-xs whitespace-nowrap",
-                          TONE[status.tone],
-                        )}
-                      >
-                        {status.text}
-                      </span>
-                    </td>
-                    <td className="num px-4 py-3 text-right">
-                      {p.discovered_tournaments}
-                    </td>
-                    <td className="num px-4 py-3 text-right">
-                      {p.public_tournaments}
-                    </td>
-                    <td className="num px-4 py-3 text-right">
-                      {p.public_matches.toLocaleString("en-AU")}
-                    </td>
-                    <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                      {p.last_sync_at
-                        ? `synced ${formatMoment(p.last_sync_at)}: ${SYNC_STATUS[p.last_sync_status ?? ""] ?? p.last_sync_status}`
-                        : formatRetrieved(p.last_retrieved_at)}
-                      {p.awaiting_import > 0 && (
-                        <span className="num block text-xs">
-                          {p.awaiting_import} awaiting import
-                        </span>
-                      )}
-                      {p.first_played && (
-                        <span className="num block text-xs">
-                          matches {formatDate(p.first_played)} –{" "}
-                          {formatDate(p.last_played)}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <dl className="grid gap-x-6 gap-y-2 border-t px-4 py-3 text-xs text-muted-foreground sm:grid-cols-2">
-          <div>
-            <dt className="inline font-medium text-foreground">Discovered:</dt>{" "}
-            <dd className="inline">
-              listed by the provider. Results are not assumed.
-            </dd>
+      </Section>
+
+      <Federations coverage={c} />
+
+      <div className="grid gap-12 md:grid-cols-2">
+        <Section title="How players are identified">
+          <div className="space-y-3 pt-4 text-[14px] text-muted-foreground">
+            <p>
+              Records are joined automatically only on a stable identifier
+              issued by the same federation, and only when nothing conflicts.
+              Similar names alone never join two records.
+            </p>
+            <p>
+              Anything uncertain stays as separate records until stronger
+              evidence arrives. Every link is recorded and can be undone.
+            </p>
           </div>
-          <div>
-            <dt className="inline font-medium text-foreground">Public:</dt>{" "}
-            <dd className="inline">
-              at least one match that may be shown here.
-            </dd>
+        </Section>
+        <Section title="Sourced and calculated">
+          <div className="space-y-3 pt-4 text-[14px] text-muted-foreground">
+            <p>
+              <span className="text-foreground">Sourced, as published:</span>{" "}
+              names, tournaments, dates, events, rounds, scores, walkovers,
+              retirements, courts and durations.
+            </p>
+            <p>
+              <span className="text-foreground">Calculated here:</span> win–loss
+              records, head-to-head counts and recent form, from decided matches
+              only. A cancelled or unplayed match never counts as a win or a
+              loss. There are no rankings or ratings.
+            </p>
           </div>
-        </dl>
-      </Panel>
-      {coverage.excluded.length > 0 && (
-        <Panel title="Deliberately not published">
-          <ul className="list-disc space-y-1 py-4 pr-4 pl-9 text-sm text-muted-foreground">
-            {coverage.excluded.map((e) => (
+        </Section>
+      </div>
+
+      {c.excluded.length > 0 && (
+        <Section title="Deliberately not published">
+          <ul className="list-disc space-y-1 pt-4 pl-5 text-[14px] text-muted-foreground">
+            {c.excluded.map((e) => (
               <li key={e}>{e}</li>
             ))}
           </ul>
-          <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-            These records are filtered on the server before any page is built,
-            and every count on this site includes published records only.
-          </p>
-        </Panel>
+        </Section>
       )}
-    </>
+    </div>
+  );
+}
+
+/** The ledger: one row per source, its real public counts, span, health and known limits. */
+function Federations({ coverage }: { coverage: Coverage }) {
+  const rows = [...coverage.providers].sort(
+    (a, b) => b.public_matches - a.public_matches,
+  );
+  return (
+    <Section title="Federations and sources">
+      <ul className="divide-y">
+        {rows.map((p) => {
+          const status = PROVIDER_STATUS[p.status];
+          const fed = FEDERATION[p.source_id];
+          return (
+            <li
+              key={p.source_id}
+              className="grid gap-x-8 gap-y-3 py-6 md:grid-cols-[minmax(0,1fr)_14rem]"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h3 className="display text-[20px] font-semibold">
+                    {fed?.country ?? fed?.label ?? p.name}
+                  </h3>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[12px] font-medium",
+                      TONE[status.tone],
+                    )}
+                  >
+                    {status.text}
+                  </span>
+                </div>
+                <p className="mt-1 text-[13px] text-subtle">{p.name}</p>
+                {p.limitations.length > 0 && (
+                  <ul className="mt-3 space-y-1 text-[14px] text-muted-foreground">
+                    {p.limitations.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] md:grid-cols-1">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Public tournaments</dt>
+                  <dd className="num font-medium">
+                    {p.public_tournaments.toLocaleString("en-AU")}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Public matches</dt>
+                  <dd className="num font-medium">
+                    {p.public_matches.toLocaleString("en-AU")}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Discovered</dt>
+                  <dd className="num">
+                    {p.discovered_tournaments.toLocaleString("en-AU")}
+                  </dd>
+                </div>
+                {p.awaiting_import > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">Awaiting import</dt>
+                    <dd className="num">
+                      {p.awaiting_import.toLocaleString("en-AU")}
+                    </dd>
+                  </div>
+                )}
+                {p.first_played && (
+                  <div className="col-span-2 text-subtle md:col-span-1">
+                    <dt className="sr-only">Matches span</dt>
+                    <dd className="num">
+                      Matches {formatDate(p.first_played)} –{" "}
+                      {formatDate(p.last_played)}
+                    </dd>
+                  </div>
+                )}
+                <div className="col-span-2 text-subtle md:col-span-1">
+                  <dt className="sr-only">Last sync</dt>
+                  <dd>
+                    {p.last_sync_at
+                      ? `Synced ${formatMoment(p.last_sync_at)}: ${SYNC_STATUS[p.last_sync_status ?? ""] ?? p.last_sync_status}`
+                      : "Not synced yet"}
+                  </dd>
+                </div>
+              </dl>
+            </li>
+          );
+        })}
+      </ul>
+    </Section>
   );
 }

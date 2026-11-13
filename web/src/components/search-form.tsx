@@ -26,7 +26,7 @@ export function SearchForm({
       <div className="relative flex-1">
         <Search
           aria-hidden
-          className={`pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-subtle ${compact ? "left-3" : "left-4"}`}
+          className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-subtle ${compact ? "left-3 size-4" : "left-4 size-5"}`}
         />
         <Input
           id={compact ? "q-compact" : "q"}
@@ -41,25 +41,28 @@ export function SearchForm({
           autoComplete="off"
           spellCheck={false}
           placeholder={
-            compact ? "Search players" : "Player name, e.g. a surname"
+            compact ? "Search players…" : "Player name, e.g. a surname…"
           }
           className={
             compact
-              ? "h-9 rounded-full bg-white/[0.04] pr-10 pl-9 [&::-webkit-search-cancel-button]:hidden"
-              : "h-12 rounded-xl bg-white/[0.04] pl-11 text-base"
+              ? "h-10 rounded-lg bg-card pr-10 pl-9 shadow-[0_1px_2px_rgb(18_26_38/0.06)] [&::-webkit-search-cancel-button]:hidden"
+              : "h-14 rounded-xl bg-card pl-12 text-[17px] shadow-[0_1px_2px_rgb(18_26_38/0.05),0_8px_24px_-12px_rgb(18_26_38/0.18)]"
           }
         />
         {compact && (
           <kbd
             aria-hidden
-            className="pointer-events-none absolute top-1/2 right-2.5 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center rounded-md bg-white/[0.06] px-1.5 font-sans text-[11px] text-subtle"
+            className="pointer-events-none absolute top-1/2 right-2.5 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center rounded border bg-muted px-1.5 font-sans text-[11px] text-subtle"
           >
             /
           </kbd>
         )}
       </div>
       {!compact && (
-        <Button type="submit" className="h-12 rounded-xl px-6 font-medium">
+        <Button
+          type="submit"
+          className="h-14 rounded-xl px-7 text-[15px] font-medium"
+        >
           Search
         </Button>
       )}

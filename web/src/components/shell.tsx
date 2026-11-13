@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { SiteHeader } from "@/components/site-header";
+import { MobileBar, Sidebar } from "@/components/site-header";
 
 export function Shell({
   children,
@@ -10,19 +10,20 @@ export function Shell({
   showSearch?: boolean;
 }) {
   return (
-    <>
-      <SiteHeader showSearch={showSearch} />
-      <main
-        id="main"
-        className="mx-auto w-full max-w-[1200px] flex-1 px-4 pt-10 pb-16 sm:px-6 sm:pt-14"
-      >
-        {children}
-      </main>
-      <footer className="border-t border-white/[0.05]">
-        <div className="mx-auto max-w-[1200px] px-4 py-6 text-xs text-subtle sm:px-6">
+    <div className="flex min-h-dvh">
+      <Sidebar showSearch={showSearch} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <MobileBar showSearch={showSearch} />
+        <main
+          id="main"
+          className="mx-auto w-full max-w-[1160px] flex-1 px-4 pt-8 pb-28 sm:px-8 lg:px-12 lg:pt-14 lg:pb-16"
+        >
+          {children}
+        </main>
+        <footer className="mx-auto w-full max-w-[1160px] px-4 pb-24 text-xs text-subtle sm:px-8 lg:px-12 lg:pb-8">
           Results are shown as published by their source.
-        </div>
-      </footer>
-    </>
+        </footer>
+      </div>
+    </div>
   );
 }
