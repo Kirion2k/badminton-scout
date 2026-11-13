@@ -130,6 +130,10 @@ _TS_PORTAL_VERIFIED = {
     "dbv": "2026-11-13: one tournament, 2 days, 321/322 rows normalised (1 unknown message)",
     "scotland": "2026-11-13: one tournament imported; 2 others keep match days behind a login",
     "obv": "2026-11-13: reachable after consent; 3 of 3 tournaments show no public match days",
+    "england": "2026-11-13 (after consent): one tournament, 2 days, 86/86 rows normalised",
+    "badvla": "2026-11-13: one tournament, 2 days, 260/261 rows normalised ('Opgave' now mapped)",
+    "canada": "2026-11-13: listing works (40); 7 of 7 tournaments yield no match rows (the "
+    "endpoint answers 'No matches found' or the runtime reports a login): not validated",
 }
 _TS_BA_EVIDENCE = (
     "matchesInDay learned 2026-11-12 with `api-anything add` from two distinct tournament/day "

@@ -50,6 +50,15 @@ export const FEDERATION: Record<
     label: "Confederação Brasileira de Badminton",
     country: "Brazil",
   },
+  tournamentsoftware_england: {
+    label: "Badminton England",
+    country: "England",
+  },
+  tournamentsoftware_canada: { label: "Badminton Canada", country: "Canada" },
+  tournamentsoftware_badvla: {
+    label: "Badminton Vlaanderen",
+    country: "Belgium (Flanders)",
+  },
   tournamentsoftware: { label: "Tournament Software (global)", country: null },
   tournamentsoftware_bwf: { label: "BWF (Tournament Software)", country: null },
   bwf: { label: "BWF", country: null },

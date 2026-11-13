@@ -162,6 +162,12 @@ def test_cancelled_match_is_not_played() -> None:
     assert (m.status, m.winner_side) == ("not_played", None)
 
 
+def test_dutch_retirement_is_retired() -> None:
+    # badvla.tournamentsoftware.com, 2026-11-13: "Opgave" after games were played
+    m = norm(row(points=(21, 15, 8, 3), winner=1, message="Opgave"))
+    assert (m.status, m.winner_side) == ("retired", 1)
+
+
 def test_german_cancelled_is_not_played() -> None:
     # dbv.turnier.de, 2026-11-13: "Abgesagt", no games, no winner
     m = norm(row(points=(), winner=None, message="Abgesagt"))

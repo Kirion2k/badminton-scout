@@ -45,9 +45,11 @@ global expansion on 2026-11-13). Logins, challenges and anti-bot protections are
 | Badminton Scotland | `badmintonscotland.` | minimal cookie consent | verified on 1 tournament | yes | many tournaments keep match days behind a login |
 | Austria (ÖBV) | `obv.` | minimal cookie consent | reachable; 0 of 3 tournaments with public match days | no | find a tournament with public match days |
 | BWF | `bwf.tournamentsoftware.com`, `bwfbadminton.com` | login / Cloudflare | none | no | provider-issued credentials or API (docs/bwf-access-request.md) |
-| Badminton Vlaanderen | `badvla.` (seen owning 11 tournaments) | — | — | no | **scope gap:** a regional federation within Belgium, not named in the attestation; needs the owner's confirmation |
-| Badminton England, Netherlands, Denmark, Spain, Badminton Europe | not yet identified | — | — | no | find each federation's results platform; Tournament Software portals show up in `scout report portals` as the daily owner checks run |
-| Badminton Canada, USA Badminton, Pan Am members | not yet identified (except Brazil) | — | — | no | same |
+| Badminton Vlaanderen | `badvla.` | open | verified (260/261) | yes | owner-approved 2026-11-13 |
+| Badminton England | `be.` | minimal cookie consent | verified (86/86) | yes | — |
+| Badminton Canada | `badmintoncanada.` | open | listing only | no | match pages yield no rows in 7 tournaments: find a tournament with published matches |
+| Netherlands, Denmark, Spain, Badminton Europe | not yet identified | — | — | no | find each federation's results platform; Tournament Software portals show up in `scout report portals` as the daily owner checks run |
+| USA Badminton, other Pan Am members | not yet identified (except Brazil) | — | — | no | same |
 | Badminton Oceania, Badminton Asia, Badminton Confederation Africa and their members | not yet identified | — | — | no | same |
 
 **How a new Tournament Software portal is added:**

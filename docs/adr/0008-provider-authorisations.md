@@ -92,3 +92,16 @@ unrelated services linked from those sites.
   Tournaments behind a login stay out.
 - No agreement text is on file yet. `docs/global-integrations.md` tracks the basis and status of
   each source.
+
+## Amendment 2026-11-13: England, Canada and Flanders
+
+The owner supplied these portals and explicitly approved Badminton Vlaanderen (Flanders, a regional
+federation within Belgium), closing the scope gap recorded earlier:
+
+| Federation | Host | Consent wall | Live result |
+|---|---|---|---|
+| Badminton England | `be.tournamentsoftware.com` | yes (minimal consent) | 86/86 rows normalised |
+| Badminton Canada | `badmintoncanada.tournamentsoftware.com` | no | listing works; 0 match rows in 7 tournaments, not validated |
+| Badminton Vlaanderen | `badvla.tournamentsoftware.com` | no | 260/261 rows normalised |
+
+Same rules as every portal: 1 request per 5 s, 2,000 a day, never past a login or challenge.

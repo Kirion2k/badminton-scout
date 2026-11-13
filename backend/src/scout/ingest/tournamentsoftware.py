@@ -46,6 +46,7 @@ _MESSAGES: dict[str, Status] = {
     "retired": "retired",  # seen 2026-11-12
     "cancelled": "not_played",  # seen 2026-11-12
     "abgesagt": "not_played",  # German "cancelled", dbv.turnier.de, seen 2026-11-13
+    "opgave": "retired",  # Dutch "retired", badvla., seen 2026-11-13
     # a winner by disqualification; games played before it are kept as recorded (seen 2026-11-13)
     "disqualified": "disqualified",
 }

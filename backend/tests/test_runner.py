@@ -125,7 +125,7 @@ def test_discovery_is_deduplicated_across_portals(session: Session) -> None:
         ("www.tournamentsoftware.com", "tournamentsoftware", "new"),
         ("bwf.tournamentsoftware.com", "tournamentsoftware_bwf", "login_required"),
         ("bnz.tournamentsoftware.com", "tournamentsoftware_bnz", "new"),
-        ("badvla.tournamentsoftware.com", None, "unauthorised_host"),
+        ("unlisted.tournamentsoftware.com", None, "unauthorised_host"),
     ],
 )
 def test_owner_routing(session: Session, host: str, source: str | None, status: str) -> None:
@@ -276,7 +276,7 @@ def test_login_wall_is_recorded_not_retried(session: Session) -> None:
 
 def test_unauthorised_owner_is_never_imported(session: Session) -> None:
     record_discovered(session, "tournamentsoftware", [TsTournament.model_validate(listing())], None)
-    resolve_owners(session, lambda g: "badvla.tournamentsoftware.com", limit=5)
+    resolve_owners(session, lambda g: "unlisted.tournamentsoftware.com", limit=5)
     client = PortalClient({DAY1: [row()]})
     run(session, client)
     assert client.asked == []

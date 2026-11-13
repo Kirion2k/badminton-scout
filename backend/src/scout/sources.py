@@ -57,12 +57,16 @@ TS_FEDERATION_PORTALS: Mapping[str, tuple[str, str]] = MappingProxyType(
         "dbv": ("dbv.turnier.de", "Deutscher Badminton-Verband (Germany)"),
         "obv": ("obv.tournamentsoftware.com", "Österreichischer Badmintonverband (Austria)"),
         "cbbd": ("cbbd.tournamentsoftware.com", "Confederação Brasileira de Badminton (Brazil)"),
+        # owner-supplied portals, 2026-11-13; Flanders explicitly approved by the owner
+        "england": ("be.tournamentsoftware.com", "Badminton England"),
+        "canada": ("badmintoncanada.tournamentsoftware.com", "Badminton Canada"),
+        "badvla": ("badvla.tournamentsoftware.com", "Badminton Vlaanderen (Belgium)"),
     }
 )
 
 # Portals that put a cookie wall before results (seen live 2026-11-13: a 302 to /cookiewall).
 # They get the same minimal "Basic functionality" consent as www. (ADR-0008 §6).
-TS_COOKIE_WALL_PORTALS = frozenset({"scotland", "dbv", "obv", "cbbd"})
+TS_COOKIE_WALL_PORTALS = frozenset({"scotland", "dbv", "obv", "cbbd", "england"})
 
 SOURCES: Mapping[str, SourceRights] = MappingProxyType(
     {
