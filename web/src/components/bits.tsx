@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import {
   type Outcome,
   formatDate,
-  formatRetrieved,
   formatScore,
   resultLabel,
 } from "@/lib/format";
@@ -82,20 +81,6 @@ export function FormStrip({ results }: { results: ("won" | "lost")[] }) {
   );
 }
 
-export function Provenance({
-  sources,
-  retrievedAt,
-}: {
-  sources: string[];
-  retrievedAt: string | null | undefined;
-}) {
-  return (
-    <SourceNote>
-      {sources.join(", ") || "not recorded"} · {formatRetrieved(retrievedAt)}
-    </SourceNote>
-  );
-}
-
 /** Where a record comes from, always next to it: quiet, with the way to the coverage page. */
 export function SourceNote({ children }: { children: ReactNode }) {
   return (
@@ -110,58 +95,6 @@ export function SourceNote({ children }: { children: ReactNode }) {
         About this data
       </Link>
     </p>
-  );
-}
-
-const LABEL = "label-quiet";
-
-export function Label({ children }: { children: ReactNode }) {
-  return <span className={LABEL}>{children}</span>;
-}
-
-/** A labelled value inside a <dl>: the term styled as a label, the value as given. */
-export function Fact({
-  term,
-  title,
-  className,
-  children,
-}: {
-  term: string;
-  title?: string;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div title={title} className={className}>
-      <dt className={LABEL}>{term}</dt>
-      <dd className="mt-1.5">{children}</dd>
-    </div>
-  );
-}
-
-export function Panel({
-  title,
-  children,
-  className,
-}: {
-  title?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cn(
-        "min-w-0 rounded-[10px] bg-card ring-1 ring-border",
-        className,
-      )}
-    >
-      {title && (
-        <h2 className="px-5 pt-4 pb-1 text-[13px] font-medium text-muted-foreground">
-          {title}
-        </h2>
-      )}
-      {children}
-    </section>
   );
 }
 
@@ -184,7 +117,8 @@ export function EmptyState({
 
 export function RowsSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="space-y-3 p-5" aria-busy="true" aria-label="Loading">
+    <div className="space-y-3 p-5" role="status" aria-busy="true">
+      <span className="sr-only">Loading…</span>
       {Array.from({ length: rows }, (_, i) => (
         <Skeleton
           key={i}
@@ -193,53 +127,6 @@ export function RowsSkeleton({ rows = 6 }: { rows?: number }) {
         />
       ))}
     </div>
-  );
-}
-
-export function PageHeader({
-  title,
-  eyebrow,
-  children,
-}: {
-  title: ReactNode;
-  eyebrow?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="space-y-4 pb-10">
-      {eyebrow && <p className="label-quiet">{eyebrow}</p>}
-      <h1 className="display max-w-4xl text-[36px] leading-[1] text-balance uppercase sm:text-[52px]">
-        {title}
-      </h1>
-      {children}
-    </div>
-  );
-}
-
-/** Icon + text items in one quiet line ("24–25 Oct 2026 · Melbourne · Badminton Victoria"). */
-export function MetaRow({ children }: { children: ReactNode }) {
-  return (
-    <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
-      {children}
-    </ul>
-  );
-}
-
-export function MetaItem({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <li className="flex min-w-0 items-center gap-2">
-      <Icon aria-hidden className="size-4 shrink-0 text-subtle" />
-      <span className="sr-only">{label}: </span>
-      <span className="min-w-0 truncate text-foreground">{children}</span>
-    </li>
   );
 }
 
@@ -256,32 +143,6 @@ export function Select({ className, ...props }: ComponentProps<"select">) {
         className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-subtle"
       />
     </span>
-  );
-}
-
-/** Link pills for one choice among a few (events). The selected one is marked, not loud. */
-export function PillLink({
-  href,
-  selected,
-  children,
-}: {
-  href: string;
-  selected: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={selected ? "page" : undefined}
-      className={cn(
-        "relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] whitespace-nowrap transition-colors duration-150",
-        selected
-          ? "bg-night text-on-dark"
-          : "text-muted-foreground ring-1 ring-border hover:bg-muted hover:text-foreground",
-      )}
-    >
-      {children}
-    </Link>
   );
 }
 

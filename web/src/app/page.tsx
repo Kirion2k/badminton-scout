@@ -10,6 +10,7 @@ import {
   Monogram,
   RowsSkeleton,
   Section,
+  SourceNote,
 } from "@/components/bits";
 import { Scoreboard } from "@/components/scoreboard";
 import { SearchForm } from "@/components/search-form";
@@ -189,7 +190,12 @@ async function FeaturedResults({
 }: {
   tournament: TournamentSummary;
 }) {
-  const page = await api.tournamentMatches(t.id, { limit: 200 });
+  // the API lists oldest first: count, then read only the newest 40 (the final day's rounds)
+  const { total } = await api.tournamentMatches(t.id, { limit: 1 });
+  const page = await api.tournamentMatches(t.id, {
+    limit: 40,
+    offset: Math.max(0, total - 40),
+  });
   const decided = page.items.filter((m) => m.winner_side !== null);
   const late = decided.filter((m) => LATE_ROUND.test(m.round ?? ""));
   const shown = (late.length >= 2 ? late : decided).slice(-4).reverse();
@@ -223,6 +229,9 @@ async function FeaturedResults({
           <Scoreboard key={m.id} match={m} showEvent />
         ))}
       </ul>
+      <div className="pt-3">
+        <SourceNote>{t.source}</SourceNote>
+      </div>
     </Section>
   );
 }

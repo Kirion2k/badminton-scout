@@ -597,9 +597,10 @@ function ProfileSkeleton() {
       <Hero>
         <div
           className="flex items-end gap-6 pb-16"
+          role="status"
           aria-busy="true"
-          aria-label="Loading player"
         >
+          <span className="sr-only">Loading player…</span>
           <Skeleton className="size-28 rounded-xl bg-white/10" />
           <div className="space-y-3">
             <Skeleton className="h-3 w-24 bg-white/10" />

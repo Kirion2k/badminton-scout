@@ -74,10 +74,14 @@ function Side({
   won: boolean;
 }) {
   return (
-    <div className="grid min-h-11 grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-3 pr-2">
+    <div className="grid min-h-11 grid-cols-[5px_minmax(0,1fr)_auto] items-center gap-3 pr-2">
+      {/* lime alone is 1.3:1 on white; the dark edge carries the 3:1 a graphic needs */}
       <span
         aria-hidden
-        className={cn("h-full self-stretch", won && "bg-lime")}
+        className={cn(
+          "h-full self-stretch",
+          won && "bg-lime shadow-[inset_-2px_0_0_var(--accent-ink)]",
+        )}
       />
       <span
         className={cn(

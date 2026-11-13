@@ -1,7 +1,7 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
-import { Suspense } from "react";
 
-import { Freshness, TopBar } from "@/components/site-header";
+import { TopBar } from "@/components/site-header";
 
 /** Page frame. `hero` renders full-bleed under the top bar, before the main column. */
 export function Shell({
@@ -23,9 +23,12 @@ export function Shell({
       <footer className="border-t bg-card">
         <div className="mx-auto flex w-full max-w-[1240px] flex-wrap justify-between gap-x-6 gap-y-1 px-4 pt-5 pb-24 text-xs text-subtle sm:px-8 lg:pb-6">
           <p>Results are shown as published by their source.</p>
-          <Suspense fallback={null}>
-            <Freshness />
-          </Suspense>
+          <Link
+            href="/coverage"
+            className="hover:text-foreground hover:underline"
+          >
+            Sources and data freshness
+          </Link>
         </div>
       </footer>
     </div>

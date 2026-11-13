@@ -105,7 +105,16 @@ async function MatchCentre({
                   ? "No more matches"
                   : "No matches in this event"
               }
-            />
+            >
+              {page > 1 && matches.total > 0 && (
+                <Link
+                  className="underline underline-offset-[3px]"
+                  href={href(id, view)}
+                >
+                  Back to the first page
+                </Link>
+              )}
+            </EmptyState>
           ) : (
             groups.map(([name, rows], i) => (
               <section key={`${name}-${i}`} aria-label={name} className="pt-6">
@@ -173,12 +182,14 @@ function TournamentHero({
   return (
     <Hero tone="court">
       <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
-        {fed ? `${fed.country ?? "International"} · ${fed.label}` : "Tournament"}
+        {fed
+          ? `${fed.country ?? "International"} · ${fed.label}`
+          : "Tournament"}
       </p>
       <h1 className="display mt-3 max-w-4xl text-[36px] leading-[0.98] text-balance sm:text-[52px]">
         {detail.name ?? "Unnamed tournament"}
       </h1>
-      <ul className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-[14px] text-on-court-muted">
+      <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 text-[14px] text-on-court-muted sm:mt-5">
         <HeroMeta icon={CalendarDays} label="Dates">
           <span className="num">
             {formatDateRange(detail.start_date, detail.end_date)}
@@ -193,7 +204,7 @@ function TournamentHero({
           </HeroMeta>
         )}
       </ul>
-      <dl className="mt-6 flex flex-wrap items-end gap-x-10 gap-y-4">
+      <dl className="mt-4 flex flex-wrap items-end gap-x-7 gap-y-3 sm:mt-6 sm:gap-x-10">
         <HeroFact term="Events" value={detail.events.length} />
         <HeroFact term="Matches" value={total} />
         {days !== null && days > 0 && <HeroFact term="Days" value={days} />}
@@ -212,7 +223,7 @@ function TournamentHero({
           </dd>
         </div>
       </dl>
-      <p className="mt-5 text-[12px] text-on-court-muted">
+      <p className="mt-4 text-[12px] text-on-court-muted sm:mt-5">
         Source {detail.source} ·{" "}
         <Link
           href="/coverage"
@@ -223,7 +234,7 @@ function TournamentHero({
       </p>
       <nav
         aria-label="Disciplines"
-        className="-mx-4 mt-7 flex scroll-px-4 gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+        className="-mx-4 mt-5 flex scroll-px-4 gap-0.5 overflow-x-auto px-4 sm:mx-0 sm:mt-7 sm:gap-1 sm:px-0"
       >
         <DisciplineTab
           href={href(id, {})}
@@ -271,7 +282,7 @@ function HeroFact({ term, value }: { term: string; value: number }) {
       <dt className="mt-1 font-display text-[12px] font-semibold tracking-[0.12em] text-on-court-muted uppercase">
         {term}
       </dt>
-      <dd className="reveal display num text-[40px] leading-none">
+      <dd className="reveal display num text-[30px] leading-none sm:text-[40px]">
         {value.toLocaleString("en-AU")}
       </dd>
     </div>
@@ -299,7 +310,7 @@ function DisciplineTab({
       title={name}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "flex shrink-0 items-baseline gap-1.5 rounded-t-[10px] px-4 pt-3 pb-3.5 transition-colors duration-150",
+        "flex shrink-0 items-baseline gap-1.5 rounded-t-[10px] px-3 pt-3 pb-3.5 transition-colors duration-150 sm:px-4",
         current
           ? "bg-background text-foreground"
           : "text-on-court-muted hover:bg-white/8 hover:text-on-dark",
@@ -312,10 +323,10 @@ function DisciplineTab({
         {code}
       </span>
       <span className="sr-only">{name}</span>
-      <span className="num text-[12px]">
-        <span className="sr-only">, </span>
+      {/* the count is spoken everywhere but shown from 640 px, so six tabs fit a phone */}
+      <span className="sr-only">, {count} matches</span>
+      <span aria-hidden className="num hidden text-[12px] sm:inline">
         {count.toLocaleString("en-AU")}
-        <span className="sr-only"> matches</span>
       </span>
     </Link>
   );
@@ -454,22 +465,22 @@ function ImportNote({ detail }: { detail: TournamentDetail }) {
   );
 }
 
+/** Groups by key in first-seen order: a round played over two days is still one group. */
 function groupBy<T>(items: T[], key: (item: T) => string): [string, T[]][] {
-  const groups: [string, T[]][] = [];
+  const groups = new Map<string, T[]>();
   for (const item of items) {
     const k = key(item);
-    const last = groups.at(-1);
-    if (last && last[0] === k) last[1].push(item);
-    else groups.push([k, [item]]);
+    groups.set(k, [...(groups.get(k) ?? []), item]);
   }
-  return groups;
+  return [...groups];
 }
 
 function MatchCentreSkeleton() {
   return (
     <>
       <Hero tone="court">
-        <div className="space-y-4 pb-16" aria-busy="true" aria-label="Loading">
+        <div className="space-y-4 pb-16" role="status" aria-busy="true">
+          <span className="sr-only">Loading tournament…</span>
           <Skeleton className="h-3 w-40 bg-white/10" />
           <Skeleton className="h-12 w-[36rem] max-w-full bg-white/10" />
           <Skeleton className="h-4 w-80 max-w-full bg-white/10" />

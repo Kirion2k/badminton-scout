@@ -6,8 +6,6 @@ import { Mark } from "@/components/brand";
 import { NavLinks, NavList } from "@/components/nav-links";
 import { SearchForm } from "@/components/search-form";
 import { SlashFocus } from "@/components/slash-focus";
-import { api } from "@/lib/api/client";
-import { formatMoment, formatNextSync } from "@/lib/format";
 
 function Wordmark() {
   return (
@@ -58,16 +56,5 @@ export function TopBar({ showSearch }: { showSearch: boolean }) {
         </Suspense>
       </div>
     </>
-  );
-}
-
-/** Data freshness, in the footer of every page. */
-export async function Freshness() {
-  const c = await api.coverage();
-  return (
-    <p className="num">
-      Last sync {formatMoment(c.last_sync_at) ?? "not yet run"} · Next{" "}
-      {formatNextSync(c.next_sync_at)}
-    </p>
   );
 }
