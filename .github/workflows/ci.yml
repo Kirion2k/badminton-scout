@@ -1,0 +1,129 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      db:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: scout
+          POSTGRES_PASSWORD: scout-ci-only
+          POSTGRES_DB: scout
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U scout -d scout"
+          --health-interval 2s --health-timeout 3s --health-retries 15
+    env:
+      SCOUT_ENV: test
+      SCOUT_DATABASE_URL: postgresql+psycopg://scout:scout-ci-only@localhost:5432/scout
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked pyright
+      - name: migrations apply to a clean database
+        run: uv run --locked alembic upgrade head
+      - run: uv run --locked pytest
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: generated API types match the FastAPI contract
+        run: |
+          (cd ../backend && uv sync --locked && uv run --locked scout openapi) > src/lib/api/openapi.json
+          npm run api:types
+          git diff --exit-code -- src/lib/api/
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    needs: [backend, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      db:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: scout
+          POSTGRES_PASSWORD: scout-ci-only
+          POSTGRES_DB: scout
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U scout -d scout"
+          --health-interval 2s --health-timeout 3s --health-retries 15
+    env:
+      # synthetic fixture only: e2e/backend.sh refuses any database not named *_e2e
+      E2E_DATABASE_URL: postgresql+psycopg://scout:scout-ci-only@localhost:5432/scout_e2e
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: (cd ../backend && uv sync --locked)
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: web/test-results/
+          retention-days: 7

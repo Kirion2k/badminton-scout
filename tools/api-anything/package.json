@@ -1,0 +1,9 @@
+{
+  "name": "badminton-scout-api-anything-runtime",
+  "private": true,
+  "description": "Pinned API Anything runtime for Badminton Scout. Install with `make api-anything-install`.",
+  "engines": { "node": ">=22.13.0" },
+  "dependencies": {
+    "api-anything": "0.4.0"
+  }
+}

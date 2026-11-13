@@ -1,0 +1,239 @@
+{
+  "name": "tournamentsoftware-ba",
+  "baseUrl": "https://ba.tournamentsoftware.com",
+  "operations": [
+    {
+      "name": "matchesInDay",
+      "description": "Matches played on one day of a Tournament Software tournament (Badminton Australia portal)",
+      "request": {
+        "method": "GET",
+        "url": "https://ba.tournamentsoftware.com/tournament/%7Btournament%7D/Matches/MatchesInDay?date=%7Bdate%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Not-A.Brand\";v=\"99\", \"Google Chrome\";v=\"157\", \"Chromium\";v=\"157\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "tournament",
+          "at": [
+            "path:1"
+          ]
+        },
+        {
+          "param": "date",
+          "at": [
+            "query:date"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://ba.tournamentsoftware.com/tournament/{tournament}/Matches/MatchesInDay?date={date}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "ba.tournamentsoftware.com",
+        "path": "/tournament/*/Matches/MatchesInDay"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "html": {
+          "items": ".match.match--list",
+          "fields": {
+            "event": ".match__header-title-item a .nav-link__value",
+            "drawHref": ".match__header-title-item a@href",
+            "round": ".match__header-title-item span[title]@title",
+            "info": ".match__header-aside-block@title",
+            "side1Ids": "all:.match__row-wrapper > .match__row:nth-child(1) a[data-player-id]@data-player-id",
+            "side1Names": "all:.match__row-wrapper > .match__row:nth-child(1) a[data-player-id] .nav-link__value",
+            "side2Ids": "all:.match__row-wrapper > .match__row:nth-child(2) a[data-player-id]@data-player-id",
+            "side2Names": "all:.match__row-wrapper > .match__row:nth-child(2) a[data-player-id] .nav-link__value",
+            "rowClasses": "all:.match__row-wrapper > .match__row@class",
+            "message": ".match__message",
+            "points": "all:.points__cell",
+            "h2h": ".match__btn-h2h@href"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "tournament",
+          "type": "string",
+          "required": true,
+          "description": "Tournament GUID from a /tournament/<GUID> URL",
+          "example": "57b545bf-8a9e-4de1-b93e-d5dcfae43667",
+          "pattern": "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"
+        },
+        {
+          "name": "date",
+          "type": "string",
+          "required": true,
+          "description": "Match day as YYYYMMDD, from matchDays",
+          "example": "20261017",
+          "pattern": "[0-9]{8}"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false
+    },
+    {
+      "name": "matchDays",
+      "description": "The days a Tournament Software tournament has matches on, as YYYYMMDD (hand-derived from the Matches page; see docs/api-anything.md)",
+      "request": {
+        "method": "GET",
+        "url": "https://ba.tournamentsoftware.com/tournament/%7Btournament%7D/Matches",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Not-A.Brand\";v=\"99\", \"Google Chrome\";v=\"157\", \"Chromium\";v=\"157\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "tournament",
+          "at": [
+            "path:1"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://ba.tournamentsoftware.com/tournament/{tournament}/Matches"
+      },
+      "match": {
+        "method": "GET",
+        "host": "ba.tournamentsoftware.com",
+        "path": "/tournament/*/Matches"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "html": {
+          "items": ".js-date-selection-tab",
+          "fields": {
+            "date": "@data-value"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "tournament",
+          "type": "string",
+          "required": true,
+          "description": "Tournament GUID from a /tournament/<GUID> URL",
+          "example": "57b545bf-8a9e-4de1-b93e-d5dcfae43667",
+          "pattern": "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false
+    },
+    {
+      "name": "tournamentSearch",
+      "description": "Tournaments listed on the Badminton Australia home tabs (Recent, ThisWeek, Upcoming), one page at a time (hand-derived from the home page markup; see docs/api-anything.md)",
+      "request": {
+        "method": "GET",
+        "url": "https://ba.tournamentsoftware.com/Home/DoTournamentSearch?Page=1&SelectedTab=Recent",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Not-A.Brand\";v=\"99\", \"Google Chrome\";v=\"157\", \"Chromium\";v=\"157\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+          "x-requested-with": "XMLHttpRequest"
+        }
+      },
+      "slots": [
+        {
+          "param": "page",
+          "at": [
+            "query:Page"
+          ]
+        },
+        {
+          "param": "tab",
+          "at": [
+            "query:SelectedTab"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://ba.tournamentsoftware.com/Home/DoTournamentSearch?Page={page}&SelectedTab={tab}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "ba.tournamentsoftware.com",
+        "path": "/Home/DoTournamentSearch"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "html": {
+          "items": ".media__content",
+          "fields": {
+            "name": ".media__title .nav-link__value",
+            "href": ".media__title a@href",
+            "subheading": ".media__subheading:not(.media__subheading--muted) .nav-link__value",
+            "dates": "all:time@datetime"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "tab",
+          "type": "string",
+          "required": true,
+          "example": "Recent",
+          "enum": [
+            "Recent",
+            "ThisWeek",
+            "Upcoming"
+          ],
+          "description": "Home page tab"
+        },
+        {
+          "name": "page",
+          "type": "number",
+          "required": true,
+          "example": "1",
+          "min": 1,
+          "description": "1-based page of the tab"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false
+    }
+  ]
+}
