@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import PostgresDsn
+from pydantic import PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/src/scout/config.py -> repository root. Missing file is ignored (e.g. when deployed).
@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     env: Environment
     # Required, no default: a missing URL must fail at startup, not fall back to some database.
     database_url: PostgresDsn
+    # Keyed hashing of national-identity-shaped member ids (scout.privacy.minimise_identifier).
+    # Optional: without it such ids are dropped, never stored in clear.
+    identifier_key: SecretStr | None = None
 
 
 @lru_cache

@@ -57,3 +57,22 @@ def test_restricted_events_are_served_while_the_owner_publishes_them(
     monkeypatch.setattr(scout.privacy, "PUBLISH_RESTRICTED_EVENTS", False)
     assert not is_redistributable_event("BS U15", "MS")  # the switch back still works
     assert is_redistributable_event("MS A", "MS")
+
+
+def test_national_identity_numbers_are_never_stored_in_clear() -> None:
+    from scout.privacy import minimise_h2h, minimise_identifier
+
+    cpf = "123.456.789-09"  # an invented number in the CPF shape
+    token = minimise_identifier(cpf, "k")
+    assert token and token.startswith("h-") and "123" not in token
+    assert minimise_identifier(cpf, "k") == token  # same person, same key: identity still works
+    assert minimise_identifier(cpf, "other key") != token
+    assert minimise_identifier(cpf, None) is None  # no key: dropped, not kept
+    # wrapped in invisible characters, raw or percent-encoded: the same token
+    assert minimise_identifier(f"\u200b{cpf}\u00a0", "k") == token
+    assert minimise_identifier("%e2%80%8b" + cpf + "%c2%a0", "k") == token
+    assert minimise_identifier("QA1001", "k") == "QA1001"  # ordinary member ids unchanged
+    url = f"https://x/h2h?OrganizationCode=O&T1P1MemberID={cpf}&T2P1MemberID=QA1"
+    kept = minimise_h2h(url, "k") or ""
+    assert cpf not in kept and "T2P1MemberID=QA1" in kept
+    assert "T1P1MemberID" not in (minimise_h2h(url, None) or "")

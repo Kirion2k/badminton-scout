@@ -8,7 +8,10 @@ Whether restricted events are served is the owner's decision, recorded in ADR-00
 `PUBLISH_RESTRICTED_EVENTS`. Turning it off and running `scout privacy reclassify` hides them again.
 """
 
+import hashlib
+import hmac
 import re
+import urllib.parse
 
 # ADR-0010 (2026-11-13): the owner decided to publish junior and para events too
 PUBLISH_RESTRICTED_EVENTS = True
@@ -69,3 +72,35 @@ def is_adult_event(name: str, discipline: str | None) -> bool:
     if not words or words[0] not in _ADULT_PREFIXES:
         return False
     return all(_ADULT_WORD.match(w) for w in words[1:])
+
+
+# One global rule for identifiers (ADR-0010 follow-up): a member id shaped like a national identity
+# number (Brazil's CPF, as used by cbbd.) is never stored in clear. A keyed hash keeps the same
+# person on the same key without the number itself; without a key the id is dropped.
+_NATIONAL_ID = re.compile(r"\d{3}\.\d{3}\.\d{3}-\d{2}")
+
+
+def minimise_identifier(value: str, key: str | None) -> str | None:
+    # found anywhere: sources wrap ids in invisible characters (zero-width or no-break spaces)
+    found = _NATIONAL_ID.search(urllib.parse.unquote(value))
+    if not found:
+        return value
+    if not key:
+        return None
+    return "h-" + hmac.new(key.encode(), found.group().encode(), hashlib.sha256).hexdigest()[:24]
+
+
+def minimise_h2h(url: str | None, key: str | None) -> str | None:
+    """The head-to-head link with national-identity member ids replaced (or removed)."""
+    if not url or "MemberID=" not in url:
+        return url
+    base, _, query = url.partition("?")
+    kept: list[tuple[str, str]] = []
+    for name, value in urllib.parse.parse_qsl(query, keep_blank_values=True):
+        if name.endswith("MemberID"):
+            minimal = minimise_identifier(value, key)
+            if minimal is None:
+                continue
+            value = minimal
+        kept.append((name, value))
+    return f"{base}?{urllib.parse.urlencode(kept)}"

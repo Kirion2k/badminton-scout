@@ -11,6 +11,7 @@ from typing import Any, Literal
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from scout.config import get_settings
 from scout.ingest.operations import TsMatchRow, TsTournament, ts_match_key, ts_tournament_key
 from scout.ingest.raw import content_hash, record_payload
 from scout.models import (
@@ -28,7 +29,7 @@ from scout.models import (
     SourcePlayer,
     Tournament,
 )
-from scout.privacy import canonical_event, is_redistributable_event
+from scout.privacy import canonical_event, is_redistributable_event, minimise_h2h
 from scout.sources import SOURCES
 
 Status = Literal["completed", "walkover", "retired", "disqualified", "winner_only", "not_played"]
@@ -298,7 +299,14 @@ def ingest_rows(
     """
     counts: Counter[str] = Counter()
     by_key: dict[str, list[tuple[TsMatchRow, dict[str, Any]]]] = defaultdict(list)
+    secret = get_settings().identifier_key
+    key = secret.get_secret_value() if secret else None
     for item, row in zip(items, rows, strict=True):
+        # national-identity member ids never reach storage, in the payload or in a key
+        minimal = minimise_h2h(row.get("h2h"), key)
+        if minimal != row.get("h2h"):
+            row = row | {"h2h": minimal}
+            item = TsMatchRow.model_validate(row)
         by_key[ts_match_key(item)].append((item, row))
 
     for key, group in by_key.items():

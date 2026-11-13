@@ -551,6 +551,46 @@ def _withhold(args: argparse.Namespace) -> int:
     return 0
 
 
+def _minimise() -> int:
+    """Rewrite stored payloads and player keys that hold national-identity member ids (no
+    requests). Payload hashes are recomputed, so the next import sees no change."""
+    import re
+
+    from sqlalchemy.orm import Session
+
+    from scout.config import get_settings
+    from scout.db import get_engine
+    from scout.ingest.raw import content_hash
+    from scout.models import RawRecordRevision, SourcePlayer
+    from scout.privacy import minimise_h2h, minimise_identifier
+
+    secret = get_settings().identifier_key
+    if secret is None:
+        print("SCOUT_IDENTIFIER_KEY is not set: nothing rewritten", file=sys.stderr)
+        return 2
+    key = secret.get_secret_value()
+    revisions = players = 0
+    with Session(get_engine()) as s:
+        for rev in s.scalars(
+            select(RawRecordRevision).where(RawRecordRevision.payload["h2h"].astext.op("~")(
+                r"MemberID=[^&]*\d{3}(\.|%2E)\d{3}"
+            ))
+        ):  # fmt: skip
+            payload = dict(rev.payload)
+            payload["h2h"] = minimise_h2h(payload.get("h2h"), key)
+            rev.payload, rev.content_sha256 = payload, content_hash(payload)
+            revisions += 1
+        for sp in s.scalars(select(SourcePlayer).where(SourcePlayer.source_key.like("member:%"))):
+            issuer, _, member = sp.source_key[len("member:") :].partition("/")
+            minimal = minimise_identifier(member, key)
+            if minimal != member and minimal is not None and re.search(r"\d", member):
+                sp.source_key = f"member:{issuer}/{minimal}"
+                players += 1
+        s.commit()
+    print(f"payloads rewritten: {revisions}; player keys rewritten: {players}")
+    return 0
+
+
 def _reclassify() -> int:
     """Apply the current ADR-0009 rule to all events, e.g. after the rule was tightened."""
     from sqlalchemy.orm import Session
@@ -675,6 +715,9 @@ def main(argv: list[str] | None = None) -> None:
     privacy_actions.add_parser(
         "reclassify", help="re-apply the redistribution rule to every stored event (no requests)"
     )
+    privacy_actions.add_parser(
+        "minimise", help="replace stored national-identity member ids with keyed tokens"
+    )
     for action, what in (("withhold", "act on a removal request"), ("restore", "undo a withhold")):
         p = privacy_actions.add_parser(action, help=f"{what}: one player, audited")
         p.add_argument("player", type=int, help="player id (as in /players/<id>)")
@@ -734,7 +777,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "budget":
         sys.exit(_budget(args))
     elif args.command == "privacy":
-        sys.exit(_reclassify() if args.action == "reclassify" else _withhold(args))
+        actions = {"reclassify": _reclassify, "minimise": _minimise}
+        sys.exit(actions[args.action]() if args.action in actions else _withhold(args))
     elif args.command == "identity":
         sys.exit(_identity(args))
     elif args.command == "report":
