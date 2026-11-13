@@ -46,3 +46,29 @@ We request read-only access. We will cache data and re-fetch only what has chang
 
 Kind regards,
 <name>, Badminton Scout
+
+## Alternative sources investigated (2026-11-13)
+
+**Constraints observed:** no Cloudflare challenge was attempted or retried, and no stealth or proxy
+technique was used. `bwfbadminton.com` was last contacted in M2 (1 request, challenge), and not
+since.
+
+| Route | Finding | Usable? |
+|---|---|---|
+| `bwf.tournamentsoftware.com` (BWF's own Tournament Software portal) | The global search lists BWF-run events; 18 international-sounding tournaments and 24 tournaments overall route there. Every tournament page needs a login. | No, until BWF issues credentials. They are already queued: they import the day credentials work. |
+| National federation portals | Some international events are hosted and published by the national federation, e.g. on `ba.` 6 tournaments with 2,663 public matches, on `obv.`, `dbv.` and `bnz.`. They are imported and **attributed to that federation**, not to BWF. | Yes, as federation data. They are not BWF results, and whether an event is BWF-graded is not verified. |
+| International events mirrored on `ba.` ("Australian entries only") | List match days but publish no matches. | No. |
+| Official BWF exports or downloads, licensed feeds | None found with a public, permitted access method. | No. |
+| Third-party copies | Not used: they carry no BWF authority or licence. | No. |
+
+**Identifier linking:** Tournament Software tournament GUIDs are the same across `www.` and every
+portal (owner routing relies on this), so a BWF event found through `www.` and later read from
+`bwf.` is the same record. Player ids on `bwf.` are not visible without a login, so cross-source
+player linking with BWF is untested.
+
+**Remaining dependency:** one of the following, issued by BWF:
+- credentials (or an allowlisted account) for `bwf.tournamentsoftware.com`;
+- an API or data feed;
+- an allowlisted connection to `bwfbadminton.com` that is not challenged.
+
+Nothing else blocks BWF results.
