@@ -130,27 +130,8 @@ async function Overview() {
     .sort((a, b) => b.public_matches - a.public_matches);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <div className="min-w-0 space-y-10">
+      <div className="min-w-0">
         {featured && <LatestResults tournament={featured} />}
-        <Section
-          title="Recently played"
-          action={
-            <Link href="/tournaments" className="underline">
-              All {coverage.public_tournaments.toLocaleString("en-AU")}{" "}
-              tournaments
-            </Link>
-          }
-        >
-          {recent.items.length === 0 ? (
-            <EmptyState title="No tournaments with published results yet" />
-          ) : (
-            <ul>
-              {recent.items.map((t) => (
-                <TournamentLine key={t.id} t={t} />
-              ))}
-            </ul>
-          )}
-        </Section>
       </div>
       <Section title="Federations">
         <ul className="text-[14px]">
@@ -181,6 +162,26 @@ async function Overview() {
             Sources and gaps
           </Link>
         </p>
+      </Section>
+      <Section
+        className="lg:col-span-2"
+        title="Recently played"
+        action={
+          <Link href="/tournaments" className="underline">
+            All {coverage.public_tournaments.toLocaleString("en-AU")}{" "}
+            tournaments
+          </Link>
+        }
+      >
+        {recent.items.length === 0 ? (
+          <EmptyState title="No tournaments with published results yet" />
+        ) : (
+          <ul>
+            {recent.items.map((t) => (
+              <TournamentLine key={t.id} t={t} />
+            ))}
+          </ul>
+        )}
       </Section>
     </div>
   );

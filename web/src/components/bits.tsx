@@ -145,18 +145,20 @@ export const BUTTON_QUIET =
 
 /** A page section: a green condensed heading over a green hairline, like a printed form. */
 export function Section({
+  id,
   title,
   action,
   children,
   className,
 }: {
+  id?: string;
   title: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <section className={cn("min-w-0", className)}>
+    <section id={id} className={cn("min-w-0 scroll-mt-20", className)}>
       <div className="sheet-head">
         <h2>{title}</h2>
         {action && (
@@ -167,16 +169,6 @@ export function Section({
       </div>
       {children}
     </section>
-  );
-}
-
-/** A counted figure with its label: real counts only. */
-export function Stat({ value, label }: { value: ReactNode; label: string }) {
-  return (
-    <div>
-      <p className="display num text-[28px] leading-none">{value}</p>
-      <p className="mt-1 text-[13px] text-muted-foreground">{label}</p>
-    </div>
   );
 }
 
@@ -236,7 +228,7 @@ export function FedCode({ code, label }: { code: string; label?: string }) {
   return (
     <span
       title={label}
-      className="inline-flex h-5 shrink-0 items-center rounded-[3px] border border-border px-1 text-[11px] font-semibold tracking-[0.04em] text-muted-foreground"
+      className="shrink-0 text-[12px] font-semibold tracking-[0.04em] text-muted-foreground"
     >
       <span aria-hidden={!!label}>{code}</span>
       {label && <span className="sr-only">{label}</span>}

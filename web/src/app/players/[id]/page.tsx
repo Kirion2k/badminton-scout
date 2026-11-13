@@ -180,7 +180,24 @@ function Header({
           active {formatDate(profile.first_played)} –{" "}
           {formatDate(profile.last_played)}
         </span>
+        {profile.sources.length > 0 && (
+          <> · results from {profile.sources.join(" and ")}</>
+        )}
       </p>
+      <nav
+        aria-label="On this page"
+        className="mt-2 flex gap-4 text-[14px] lg:hidden"
+      >
+        <a href="#head-to-head" className="underline">
+          Head-to-head
+        </a>
+        <a href="#partners" className="underline">
+          Partners
+        </a>
+        <a href="#by-discipline" className="underline">
+          By discipline
+        </a>
+      </nav>
       <dl className="mt-4 flex flex-wrap items-baseline gap-x-8 gap-y-3 border-t-2 border-b border-t-form border-b-border py-3">
         <div
           className="flex items-baseline gap-2"
@@ -214,7 +231,7 @@ function Header({
         {form.length > 0 && (
           <div className="flex items-center gap-2.5">
             <dt className="text-[14px] text-muted-foreground">
-              Last {form.length}
+              Last {form.length}, oldest → newest
             </dt>
             <dd>
               <FormStrip results={form} />
@@ -230,7 +247,7 @@ function Header({
 function ByDiscipline({ profile }: { profile: PlayerProfile }) {
   if (profile.by_discipline.length === 0) return null;
   return (
-    <Section title="By discipline">
+    <Section id="by-discipline" title="By discipline">
       <ul>
         {profile.by_discipline.map((d) => {
           const played = d.won + d.lost;
@@ -247,7 +264,7 @@ function ByDiscipline({ profile }: { profile: PlayerProfile }) {
               </div>
               <div
                 aria-hidden
-                className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-loss/20"
+                className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-border"
               >
                 <span
                   className="bg-form"
@@ -265,7 +282,7 @@ function ByDiscipline({ profile }: { profile: PlayerProfile }) {
 /** Head-to-head from this player's side, decided matches only. */
 function Opponents({ profile }: { profile: PlayerProfile }) {
   return (
-    <Section title="Head-to-head">
+    <Section id="head-to-head" title="Head-to-head">
       {profile.opponents.length === 0 ? (
         <p className="py-3 text-[14px] text-muted-foreground">
           No decided matches yet.
@@ -287,9 +304,9 @@ function Opponents({ profile }: { profile: PlayerProfile }) {
                 className="num shrink-0"
                 title={`${o.played} decided matches`}
               >
-                <span className="font-semibold text-form">{o.won}</span>
+                {o.won}
                 <span className="text-subtle">–</span>
-                <span className="text-loss">{o.lost}</span>
+                {o.lost}
               </span>
             </li>
           ))}
@@ -319,7 +336,7 @@ function Partners({ matches }: { matches: PlayerMatch[] }) {
     .slice(0, 6);
   if (rows.length === 0) return null;
   return (
-    <Section title="Doubles partners">
+    <Section id="partners" title="Doubles partners">
       <ul className="text-[14px]">
         {rows.map(([pid, r]) => (
           <li
@@ -330,9 +347,9 @@ function Partners({ matches }: { matches: PlayerMatch[] }) {
               {r.name}
             </Link>
             <span className="num shrink-0">
-              <span className="font-semibold text-form">{r.won}</span>
+              {r.won}
               <span className="text-subtle">–</span>
-              <span className="text-loss">{r.lost}</span>
+              {r.lost}
             </span>
           </li>
         ))}
@@ -464,7 +481,7 @@ function MatchHistory({ matches }: { matches: PlayerMatch[] }) {
             <div className="flex items-baseline justify-between gap-3 bg-wash px-2 py-1.5">
               <Link
                 href={`/tournaments/${g.id}`}
-                className="min-w-0 truncate text-[14px] font-semibold hover:underline"
+                className="min-w-0 text-[14px] font-semibold hover:underline"
               >
                 {g.name}
               </Link>
@@ -492,11 +509,11 @@ function MatchRow({ m }: { m: PlayerMatch }) {
         {formatDate(m.played_on).replace(/ \d{4}$/, "")}
       </span>
       <span className="min-w-0 leading-snug">
-        <span className="block truncate">
+        <span className="block">
           <span className="text-subtle">vs </span>
           <People people={m.opponents} />
         </span>
-        <span className="block truncate text-[12px] text-subtle">
+        <span className="block text-[12px] text-subtle">
           {m.event}
           {m.round ? ` · ${m.round}` : ""}
           {m.partners.length > 0 && (

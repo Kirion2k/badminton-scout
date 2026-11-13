@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { FedCode, RowsSkeleton, Section, Stat } from "@/components/bits";
+import { FedCode, RowsSkeleton, Section } from "@/components/bits";
 import { Shell } from "@/components/shell";
 import { type Coverage, api } from "@/lib/api/client";
 import { formatDate, formatMoment, formatNextSync } from "@/lib/format";
@@ -10,11 +10,12 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Data coverage" };
 
+// status as words in a tone, not filled chips: green good, ink partial, grey waiting, red bad
 const TONE = {
-  good: "bg-win text-white",
-  partial: "bg-muted text-foreground",
-  waiting: "bg-muted text-muted-foreground",
-  bad: "bg-loss text-white",
+  good: "text-win",
+  partial: "text-foreground",
+  waiting: "text-muted-foreground",
+  bad: "text-loss",
 };
 
 export default function CoveragePage() {
@@ -41,24 +42,15 @@ async function Ledger() {
   const c = await api.coverage();
   return (
     <div className="space-y-10">
-      <dl className="grid grid-cols-2 gap-x-10 gap-y-5 border-t-2 border-b border-t-form border-b-border py-4 md:grid-cols-4">
-        {[
-          [c.public_tournaments, "public tournaments"],
-          [c.public_matches, "public matches"],
-          [c.public_players, "players"],
-          [c.awaiting_import, "tournaments awaiting import"],
-        ].map(([value, label]) => (
-          <div key={label}>
-            <dt className="sr-only">{label}</dt>
-            <dd>
-              <Stat
-                value={Number(value).toLocaleString("en-AU")}
-                label={String(label)}
-              />
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <p className="num max-w-[65ch] border-t-2 border-b border-t-form border-b-border py-3 text-[15px]">
+        {c.public_tournaments.toLocaleString("en-AU")} public tournaments,{" "}
+        {c.public_matches.toLocaleString("en-AU")} matches and{" "}
+        {c.public_players.toLocaleString("en-AU")} players.{" "}
+        <span className="text-muted-foreground">
+          {c.awaiting_import.toLocaleString("en-AU")} more tournaments are
+          listed and awaiting import.
+        </span>
+      </p>
 
       <Section title="Data freshness">
         <dl className="grid gap-6 pt-5 sm:grid-cols-2">
@@ -79,7 +71,7 @@ async function Ledger() {
             </dd>
           </div>
         </dl>
-        <p className="mt-4 max-w-2xl text-[14px] text-muted-foreground">
+        <p className="mt-4 max-w-[65ch] text-[14px] text-pretty text-muted-foreground">
           A scheduled job imports new and corrected results within each
           provider’s daily request allowance. Pages read our database only; they
           never contact the providers. Awaiting import counts listings, not
@@ -91,7 +83,7 @@ async function Ledger() {
 
       <div className="grid gap-12 md:grid-cols-2">
         <Section title="How players are identified">
-          <div className="space-y-3 pt-4 text-[14px] text-muted-foreground">
+          <div className="max-w-[65ch] space-y-3 pt-4 text-[14px] text-pretty text-muted-foreground">
             <p>
               Records are joined automatically only on a stable identifier
               issued by the same federation, and only when nothing conflicts.
@@ -104,7 +96,7 @@ async function Ledger() {
           </div>
         </Section>
         <Section title="Sourced and calculated">
-          <div className="space-y-3 pt-4 text-[14px] text-muted-foreground">
+          <div className="max-w-[65ch] space-y-3 pt-4 text-[14px] text-pretty text-muted-foreground">
             <p>
               <span className="text-foreground">Sourced, as published:</span>{" "}
               names, tournaments, dates, events, rounds, scores, walkovers,
@@ -157,7 +149,7 @@ function Federations({ coverage }: { coverage: Coverage }) {
                   </h3>
                   <span
                     className={cn(
-                      "rounded-[3px] px-1.5 py-0.5 text-[12px] font-semibold",
+                      "text-[13px] font-semibold",
                       TONE[status.tone],
                     )}
                   >

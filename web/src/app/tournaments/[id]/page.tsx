@@ -11,10 +11,14 @@ import {
   RowsSkeleton,
   Select,
 } from "@/components/bits";
-import { ResultRow } from "@/components/scoresheet";
+import { People, ResultRow } from "@/components/scoresheet";
 import { Shell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type TournamentDetail, api } from "@/lib/api/client";
+import {
+  type TournamentDetail,
+  type TournamentMatch,
+  api,
+} from "@/lib/api/client";
 import { DISCIPLINES, formatDateRange, one, positiveInt } from "@/lib/format";
 import { FEDERATION, importFlag } from "@/lib/providers";
 import { cn } from "@/lib/utils";
@@ -96,6 +100,13 @@ async function Tournament({
               {matches.total === 1 ? "match" : "matches"} · winner first
             </span>
           </div>
+          {selected && (
+            <EventWinner
+              event={selected.name}
+              rows={matches.items}
+              lastPage={page * PAGE_SIZE >= matches.total}
+            />
+          )}
           {matches.items.length === 0 ? (
             <EmptyState
               title={
@@ -112,24 +123,32 @@ async function Tournament({
             </EmptyState>
           ) : (
             groups.map(([name, rows]) => (
-              <section key={name} aria-label={name} className="mt-4">
-                <h3 className="sticky top-14 z-10 flex items-baseline gap-3 bg-background/95 px-1 py-1.5 text-[14px] font-semibold backdrop-blur-sm">
+              <section key={name} aria-label={name} className="mt-5">
+                <h3 className="sticky top-14 z-10 flex items-baseline gap-3 bg-background/95 px-2 py-1.5 text-[16px] font-bold [font-stretch:80%] backdrop-blur-sm">
                   {name}
                   {!selected && rows[0].discipline && (
-                    <span className="text-[12px] font-normal text-subtle">
+                    <span className="text-[12px] font-normal text-subtle [font-stretch:100%]">
                       {DISCIPLINES[rows[0].discipline] ?? rows[0].discipline}
                     </span>
                   )}
                 </h3>
-                <ul className="border-t border-border">
-                  {rows.map((m) => (
-                    <ResultRow
-                      key={m.id}
-                      match={m}
-                      context={selected ? undefined : (m.round ?? undefined)}
-                    />
-                  ))}
-                </ul>
+                {(selected
+                  ? [[name, rows] as const]
+                  : groupBy(rows, (m) => m.round ?? "Round not recorded")
+                ).map(([round, inRound]) => (
+                  <div key={round}>
+                    {!selected && (
+                      <p className="px-2 pt-2 pb-1 text-[12px] text-subtle">
+                        {round}
+                      </p>
+                    )}
+                    <ul className="border-t border-border">
+                      {inRound.map((m) => (
+                        <ResultRow key={m.id} match={m} />
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </section>
             ))
           )}
@@ -149,6 +168,48 @@ async function Tournament({
         <Events id={id} detail={detail} view={view} />
       </div>
     </>
+  );
+}
+
+const FINAL = /^(final|finale|finals|f)$/i;
+// a group stage or pool has no final by design: saying one is missing would misdescribe it
+const GROUP = /\b(group|pool|poule|gruppe|groep|grupo)\b/i;
+
+/** An event's winner, read from its final when the source publishes one; never inferred. */
+function EventWinner({
+  event,
+  rows,
+  lastPage,
+}: {
+  event: string;
+  rows: TournamentMatch[];
+  lastPage: boolean;
+}) {
+  const final = rows.find((m) => FINAL.test((m.round ?? "").trim()));
+  if (!final) {
+    return lastPage && !GROUP.test(event) ? (
+      <p className="px-2 pt-2 text-[13px] text-subtle">
+        No final is published for this event, so no winner is named.
+      </p>
+    ) : null;
+  }
+  const side =
+    final.winner_side === 1
+      ? final.side1
+      : final.winner_side === 2
+        ? final.side2
+        : null;
+  return (
+    <p className="px-2 pt-2 text-[14px]">
+      <span className="text-muted-foreground">Winner </span>
+      {side ? (
+        <span className="font-semibold">
+          <People people={side} />
+        </span>
+      ) : (
+        <span className="text-subtle">not decided in the published final</span>
+      )}
+    </p>
   );
 }
 

@@ -24,7 +24,7 @@ export function ExpandableRow({
     <li className="border-b border-border">
       <div
         className={cn(
-          "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-1 py-2",
+          "grid grid-cols-[minmax(0,1fr)] items-center gap-x-3 px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto]",
           open && "bg-wash/70",
         )}
       >
@@ -35,7 +35,7 @@ export function ExpandableRow({
           aria-controls={id}
           aria-label={label}
           onClick={() => setOpen(!open)}
-          className="-my-1 flex min-h-10 items-center gap-2 rounded-md px-2 text-[14px] whitespace-nowrap hover:bg-wash"
+          className="-my-1 flex min-h-10 items-center gap-2 justify-self-end rounded-md px-2 text-[14px] whitespace-nowrap hover:bg-wash sm:justify-self-auto"
         >
           {score}
           <ChevronRight
@@ -47,7 +47,7 @@ export function ExpandableRow({
           />
         </button>
       </div>
-      <div id={id} hidden={!open} className="px-1 pt-1 pb-3 text-[13px]">
+      <div id={id} hidden={!open} className="px-2 pt-1 pb-3 text-[13px]">
         {children}
       </div>
     </li>

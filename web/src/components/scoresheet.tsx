@@ -116,7 +116,26 @@ export function ResultRow({
           {decided && <span className="sr-only"> (first named won)</span>}
         </>
       }
-      score={note ? <StatusNote>{note}</StatusNote> : text}
+      score={
+        note ? (
+          <StatusNote>{note}</StatusNote>
+        ) : (
+          // one fixed column per game so a round lines up like a ruled sheet; from 640 px a third
+          // column is always reserved, on a phone only the games played take room
+          <span
+            aria-hidden
+            className="grid auto-cols-[3.25rem] grid-flow-col text-right"
+          >
+            {[0, 1, 2].map((g) =>
+              games[g] ? (
+                <span key={g}>{`${games[g][0]}–${games[g][1]}`}</span>
+              ) : (
+                <span key={g} className="hidden sm:block" />
+              ),
+            )}
+          </span>
+        )
+      }
     >
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         {games.length > 0 ? (

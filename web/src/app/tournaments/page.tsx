@@ -420,9 +420,7 @@ function FederationLink({
         {code && <FedCode code={code} />}
         <span className="truncate">{label}</span>
       </span>
-      <span className="num text-[12px] opacity-80">
-        {count.toLocaleString("en-AU")}
-      </span>
+      <span className="num text-[12px]">{count.toLocaleString("en-AU")}</span>
     </Link>
   );
 }
