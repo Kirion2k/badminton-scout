@@ -1,52 +1,26 @@
-import { Search } from "lucide-react";
-import Link from "next/link";
 import { Suspense } from "react";
 
-import { Mark } from "@/components/brand";
+import { Wordmark } from "@/components/brand";
 import { NavLinks, NavList } from "@/components/nav-links";
 import { SearchForm } from "@/components/search-form";
 import { SlashFocus } from "@/components/slash-focus";
 
-function Wordmark() {
-  return (
-    <Link href="/" className="flex shrink-0 items-center gap-2.5">
-      <Mark className="size-8 shrink-0 rounded-lg ring-1 ring-white/15" />
-      <span
-        translate="no"
-        className="display text-[20px] leading-none tracking-[0.04em] text-on-dark uppercase"
-      >
-        Badminton <span className="text-lime">Scout</span>
-      </span>
-    </Link>
-  );
-}
-
-/** The midnight top bar: identity, sections and search on desktop; tabs at the bottom below 1024 px. */
+/** One white bar: the wordmark, the player search (the product's front door) and the sections.
+ * Below 1024 px the search keeps the bar and the sections move to tabs at the bottom. */
 export function TopBar({ showSearch }: { showSearch: boolean }) {
   return (
     <>
-      <header className="on-dark sticky top-0 z-30 bg-night">
-        <div className="mx-auto flex h-14 w-full max-w-[1240px] items-center gap-8 px-4 sm:px-8 lg:h-16">
+      <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 w-full max-w-[1240px] items-center gap-4 px-4 sm:gap-8 sm:px-8">
           <Wordmark />
-          <div className="hidden h-full lg:block">
+          <div className="min-w-0 flex-1 sm:max-w-[520px]">
+            {showSearch && <SearchForm compact />}
+          </div>
+          <div className="ml-auto hidden lg:block">
             <Suspense fallback={<NavList path={null} variant="bar" />}>
               <NavLinks variant="bar" />
             </Suspense>
           </div>
-          {showSearch && (
-            <>
-              <div className="ml-auto hidden w-72 lg:block">
-                <SearchForm compact />
-              </div>
-              <Link
-                href="/"
-                aria-label="Search players"
-                className="ml-auto flex size-11 items-center justify-center rounded-lg text-on-dark-muted hover:text-on-dark lg:hidden"
-              >
-                <Search aria-hidden className="size-5" />
-              </Link>
-            </>
-          )}
         </div>
         <SlashFocus />
       </header>

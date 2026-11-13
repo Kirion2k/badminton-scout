@@ -3,27 +3,22 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { AutoSubmit } from "@/components/auto-submit";
 import {
   BUTTON_QUIET,
   EmptyState,
   FormStrip,
   LINK,
-  Monogram,
   Pager,
   ResultBadge,
   RowsSkeleton,
-  Score,
   Section,
   Select,
 } from "@/components/bits";
-import { Container, Hero, Shell } from "@/components/shell";
+import { GameSheet, People, StatusNote } from "@/components/scoresheet";
+import { Shell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  type Schemas,
-  type PlayerMatch,
-  type PlayerProfile,
-  api,
-} from "@/lib/api/client";
+import { type PlayerMatch, type PlayerProfile, api } from "@/lib/api/client";
 import {
   DISCIPLINES,
   formatDate,
@@ -44,13 +39,11 @@ export default function PlayerPage({
   searchParams,
 }: PageProps<"/players/[id]">) {
   return (
-    <Shell
-      hero={
-        <Suspense fallback={<ProfileSkeleton />}>
-          <Profile params={params} searchParams={searchParams} />
-        </Suspense>
-      }
-    />
+    <Shell>
+      <Suspense fallback={<ProfileSkeleton />}>
+        <Profile params={params} searchParams={searchParams} />
+      </Suspense>
+    </Shell>
   );
 }
 
@@ -99,60 +92,67 @@ async function Profile({ params, searchParams }: PageProps<"/players/[id]">) {
   return (
     <>
       <Header profile={profile} form={form} />
-      <Container>
-        <div className="grid gap-14 xl:grid-cols-[minmax(0,1fr)_20rem] xl:gap-14">
-          <Section
-            title="Match history"
-            action={
-              <span className="num text-muted-foreground">
-                {matches.total} {matches.total === 1 ? "match" : "matches"}
-              </span>
-            }
-          >
-            <Filters id={id} profile={profile} filters={filters} />
-            {matches.items.length === 0 ? (
-              page > 1 && matches.total > 0 ? (
-                <EmptyState title="No more matches">
-                  <Link className={LINK} href={`/players/${id}`}>
-                    Back to the first page
-                  </Link>
-                </EmptyState>
-              ) : (
-                <EmptyState
-                  title={
-                    filtered ? "No matches with these filters" : "No matches"
-                  }
-                >
-                  {filtered && (
-                    <Link className={LINK} href={`/players/${id}`}>
-                      Clear filters
-                    </Link>
-                  )}
-                </EmptyState>
-              )
+      <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <Section
+          title="Results"
+          action={
+            <span className="num">
+              {matches.total} {matches.total === 1 ? "match" : "matches"} ·
+              newest first
+            </span>
+          }
+        >
+          <Filters id={id} profile={profile} filters={filters} />
+          {matches.items.length === 0 ? (
+            page > 1 && matches.total > 0 ? (
+              <EmptyState title="No more matches">
+                <Link className={LINK} href={`/players/${id}`}>
+                  Back to the first page
+                </Link>
+              </EmptyState>
             ) : (
-              <MatchHistory matches={matches.items} />
-            )}
-            <Pager
-              path={`/players/${id}`}
-              params={filters}
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={matches.total}
-            />
-          </Section>
-          <aside className="min-w-0 space-y-12" aria-label="Player summary">
-            <ByDiscipline profile={profile} />
-            <Partners matches={recent.items} />
-            <Tournaments id={id} profile={profile} />
-            <Opponents profile={profile} />
-          </aside>
-        </div>
-      </Container>
+              <EmptyState
+                title={
+                  filtered ? "No matches with these filters" : "No matches"
+                }
+              >
+                {filtered && (
+                  <Link className={LINK} href={`/players/${id}`}>
+                    Clear filters
+                  </Link>
+                )}
+              </EmptyState>
+            )
+          ) : (
+            <MatchHistory matches={matches.items} />
+          )}
+          <p className="mt-3 text-[12px] text-subtle">
+            In each score, this player’s side is the top row, in blue. Source{" "}
+            {profile.sources.join(", ") || "not recorded"} ·{" "}
+            {formatRetrieved(profile.data_retrieved_at)} ·{" "}
+            <Link href="/coverage" className="underline">
+              About this data
+            </Link>
+          </p>
+          <Pager
+            path={`/players/${id}`}
+            params={filters}
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={matches.total}
+          />
+        </Section>
+        <aside className="min-w-0 space-y-8" aria-label="Player summary">
+          <ByDiscipline profile={profile} />
+          <Opponents profile={profile} />
+          <Partners matches={recent.items} />
+        </aside>
+      </div>
     </>
   );
 }
 
+/** Who this is in one line, then the record, the reach and the form in one band. */
 function Header({
   profile,
   form,
@@ -165,95 +165,137 @@ function Header({
     ? Math.round((record.won / record.played) * 100)
     : null;
   return (
-    <Hero>
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-        <Monogram
-          name={profile.name}
-          className="size-20 text-[34px] ring-1 ring-white/15 sm:size-28 sm:text-[46px]"
-        />
-        <div className="min-w-0">
-          <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
-            Player
-            {profile.disciplines.length > 0 &&
-              ` · ${profile.disciplines.map((d) => DISCIPLINES[d] ?? d).join(" · ")}`}
-          </p>
-          <h1 className="display mt-2 text-[40px] leading-[0.95] text-balance uppercase sm:text-[60px]">
-            {profile.name}
-          </h1>
-          <p className="num mt-2 text-[14px] text-on-dark-muted">
-            Active {formatDate(profile.first_played)} –{" "}
-            {formatDate(profile.last_played)}
-          </p>
-        </div>
-      </div>
-      <dl className="mt-8 grid grid-cols-2 gap-x-8 gap-y-6 border-t border-white/12 py-6 sm:grid-cols-4">
+    <header>
+      <h1 className="display text-[36px] leading-none text-balance sm:text-[46px]">
+        {profile.name}
+      </h1>
+      <p className="mt-2 text-[15px] text-muted-foreground">
+        {profile.disciplines.length > 0 && (
+          <span className="font-semibold text-foreground">
+            {profile.disciplines.map((d) => DISCIPLINES[d] ?? d).join(", ")}
+          </span>
+        )}
+        {profile.disciplines.length > 0 && " · "}
+        <span className="num">
+          active {formatDate(profile.first_played)} –{" "}
+          {formatDate(profile.last_played)}
+        </span>
+      </p>
+      <dl className="mt-4 flex flex-wrap items-baseline gap-x-8 gap-y-3 border-t-2 border-b border-t-form border-b-border py-3">
         <div
-          className="flex flex-col-reverse"
+          className="flex items-baseline gap-2"
           title="Decided matches only. Walkovers are included and counted separately."
         >
-          <dt className="mt-1 font-display text-[12px] font-semibold tracking-[0.12em] text-on-dark-muted uppercase">
-            Record
-          </dt>
-          <dd className="reveal display num text-[44px] leading-none">
+          <dt className="text-[14px] text-muted-foreground">Record</dt>
+          <dd className="display num text-[28px] leading-none">
             {record.won}–{record.lost}
           </dd>
         </div>
-        <HeroStat term="Matches decided" value={record.played}>
-          {record.walkovers > 0 && `incl. ${record.walkovers} walkovers`}
-        </HeroStat>
-        <HeroStat term="Win rate" value={rate === null ? "–" : `${rate}%`} />
-        <HeroStat term="Tournaments" value={profile.tournaments} />
-      </dl>
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-8">
-        {form.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="font-display text-[12px] font-semibold tracking-[0.12em] whitespace-nowrap text-on-dark-muted uppercase">
-              Form · last {form.length}
-            </span>
-            <FormStrip results={form} />
+        <div className="flex items-baseline gap-2">
+          <dt className="sr-only">Win rate</dt>
+          <dd className="num text-[15px]">
+            {rate === null
+              ? "no decided matches"
+              : `${rate}% of ${record.played} decided`}
+            {record.walkovers > 0 && (
+              <span className="text-muted-foreground">
+                , {record.walkovers} by walkover
+              </span>
+            )}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="sr-only">Tournaments</dt>
+          <dd className="num text-[15px]">
+            {profile.tournaments}{" "}
+            {profile.tournaments === 1 ? "tournament" : "tournaments"}
+          </dd>
+        </div>
+        {form.length > 0 && (
+          <div className="flex items-center gap-2.5">
+            <dt className="text-[14px] text-muted-foreground">
+              Last {form.length}
+            </dt>
+            <dd>
+              <FormStrip results={form} />
+            </dd>
           </div>
-        ) : (
-          <span />
         )}
-        <p className="text-[12px] text-on-dark-muted">
-          Source {profile.sources.join(", ") || "not recorded"} ·{" "}
-          {formatRetrieved(profile.data_retrieved_at)} ·{" "}
-          <Link
-            href="/coverage"
-            className="underline decoration-white/30 underline-offset-[3px] hover:text-on-dark"
-          >
-            About this data
-          </Link>
-        </p>
-      </div>
-    </Hero>
+      </dl>
+    </header>
   );
 }
 
-function HeroStat({
-  term,
-  value,
-  children,
-}: {
-  term: string;
-  value: number | string;
-  children?: React.ReactNode;
-}) {
+/** Wins and losses per discipline, decided matches only: real counts and a bar to compare them. */
+function ByDiscipline({ profile }: { profile: PlayerProfile }) {
+  if (profile.by_discipline.length === 0) return null;
   return (
-    // one dt/dd group; the figure is drawn first, the term and any note under it
-    <div className="flex flex-col">
-      <dt className="order-2 mt-1 font-display text-[12px] font-semibold tracking-[0.12em] text-on-dark-muted uppercase">
-        {term}
-      </dt>
-      <dd className="reveal display num order-1 text-[44px] leading-none">
-        {value}
-      </dd>
-      {children && (
-        <dd className="order-3 mt-0.5 text-[12px] text-on-dark-muted">
-          {children}
-        </dd>
+    <Section title="By discipline">
+      <ul>
+        {profile.by_discipline.map((d) => {
+          const played = d.won + d.lost;
+          return (
+            <li key={d.discipline} className="border-b border-border py-2">
+              <div className="flex items-baseline justify-between text-[14px]">
+                <span>{DISCIPLINES[d.discipline] ?? d.discipline}</span>
+                <span className="num">
+                  {d.won}–{d.lost}
+                  <span className="ml-2 text-[12px] text-subtle">
+                    {Math.round((d.won / played) * 100)}%
+                  </span>
+                </span>
+              </div>
+              <div
+                aria-hidden
+                className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-loss/20"
+              >
+                <span
+                  className="bg-form"
+                  style={{ width: `${(d.won / played) * 100}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Section>
+  );
+}
+
+/** Head-to-head from this player's side, decided matches only. */
+function Opponents({ profile }: { profile: PlayerProfile }) {
+  return (
+    <Section title="Head-to-head">
+      {profile.opponents.length === 0 ? (
+        <p className="py-3 text-[14px] text-muted-foreground">
+          No decided matches yet.
+        </p>
+      ) : (
+        <ul className="text-[14px]">
+          {profile.opponents.map((o) => (
+            <li
+              key={o.id}
+              className="flex items-baseline justify-between gap-3 border-b border-border py-2"
+            >
+              <Link
+                href={`/players/${o.id}`}
+                className="truncate hover:underline"
+              >
+                {o.name}
+              </Link>
+              <span
+                className="num shrink-0"
+                title={`${o.played} decided matches`}
+              >
+                <span className="font-semibold text-form">{o.won}</span>
+                <span className="text-subtle">–</span>
+                <span className="text-loss">{o.lost}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
+    </Section>
   );
 }
 
@@ -278,60 +320,26 @@ function Partners({ matches }: { matches: PlayerMatch[] }) {
   if (rows.length === 0) return null;
   return (
     <Section title="Doubles partners">
-      <ul className="divide-y text-[14px]">
+      <ul className="text-[14px]">
         {rows.map(([pid, r]) => (
           <li
             key={pid}
-            className="flex items-center justify-between gap-3 py-3"
+            className="flex items-baseline justify-between gap-3 border-b border-border py-2"
           >
             <Link href={`/players/${pid}`} className="truncate hover:underline">
               {r.name}
             </Link>
-            <span className="num shrink-0 text-[13px]">
-              <span className="text-win">{r.won}</span>
+            <span className="num shrink-0">
+              <span className="font-semibold text-form">{r.won}</span>
               <span className="text-subtle">–</span>
               <span className="text-loss">{r.lost}</span>
             </span>
           </li>
         ))}
       </ul>
-      <p className="pt-3 text-[12px] text-subtle">
+      <p className="pt-2 text-[12px] text-subtle">
         Together, in this player’s latest {matches.length} matches.
       </p>
-    </Section>
-  );
-}
-
-/** Wins and losses per discipline, decided matches only: real counts drawn as a simple bar. */
-function ByDiscipline({ profile }: { profile: PlayerProfile }) {
-  if (profile.by_discipline.length === 0) return null;
-  return (
-    <Section title="By discipline">
-      <ul className="space-y-4 pt-4">
-        {profile.by_discipline.map((d) => {
-          const played = d.won + d.lost;
-          return (
-            <li key={d.discipline}>
-              <div className="flex items-baseline justify-between text-[14px]">
-                <span>{DISCIPLINES[d.discipline] ?? d.discipline}</span>
-                <span className="num text-[13px] text-muted-foreground">
-                  <span className="text-win">{d.won}</span>–
-                  <span className="text-loss">{d.lost}</span>
-                </span>
-              </div>
-              <div
-                aria-hidden
-                className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-loss/20"
-              >
-                <span
-                  className="bg-win"
-                  style={{ width: `${(d.won / played) * 100}%` }}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
     </Section>
   );
 }
@@ -357,14 +365,14 @@ function Filters({
       action={`/players/${id}`}
       method="get"
       aria-label="Filter matches"
-      className="flex flex-wrap items-center gap-2 py-4"
+      className="flex flex-wrap items-center gap-2 py-3"
     >
       <label>
         <span className="sr-only">Discipline</span>
         <Select
           name="discipline"
           defaultValue={filters.discipline ?? ""}
-          className="w-40"
+          className="w-36"
         >
           <option value="">All events</option>
           {profile.disciplines.map((d) => (
@@ -379,7 +387,7 @@ function Filters({
         <Select
           name="tournament"
           defaultValue={filters.tournament ?? ""}
-          className="w-48"
+          className="w-44"
         >
           <option value="">All tournaments</option>
           {profile.tournament_history.map((t) => (
@@ -391,7 +399,11 @@ function Filters({
       </label>
       <label>
         <span className="sr-only">Year</span>
-        <Select name="year" defaultValue={filters.year ?? ""} className="w-28">
+        <Select
+          name="year"
+          defaultValue={filters.year ?? ""}
+          className="w-[7.5rem]"
+        >
           <option value="">Any year</option>
           {years.map((y) => (
             <option key={y} value={y}>
@@ -405,13 +417,14 @@ function Filters({
         <Select
           name="result"
           defaultValue={filters.result ?? ""}
-          className="w-28"
+          className="w-[7.5rem]"
         >
           <option value="">Any result</option>
           <option value="won">Won</option>
           <option value="lost">Lost</option>
         </Select>
       </label>
+      <AutoSubmit />
       <button type="submit" className={BUTTON_QUIET}>
         Apply
       </button>
@@ -427,190 +440,98 @@ function Filters({
   );
 }
 
-function People({ people }: { people: Schemas["PlayerRef"][] }) {
-  if (people.length === 0)
-    return <span className="text-muted-foreground">Not recorded</span>;
-  return (
-    <>
-      {people.map((p, i) => (
-        <span key={`${p.id}-${i}`}>
-          {i > 0 && <span className="text-subtle"> / </span>}
-          {p.withheld ? (
-            <span className="text-subtle italic">{p.name}</span>
-          ) : (
-            <Link
-              href={`/players/${p.id}`}
-              className="underline-offset-[3px] hover:underline"
-            >
-              {p.name}
-            </Link>
-          )}
-        </span>
-      ))}
-    </>
-  );
-}
-
+/** The history, grouped by tournament as it was played: a tournament line, then one row per
+ * match with the scoresheet (this player's side on top, in blue) and the result mark. */
 function MatchHistory({ matches }: { matches: PlayerMatch[] }) {
+  const groups: { id: number; name: string; rows: PlayerMatch[] }[] = [];
+  for (const m of matches) {
+    const last = groups.at(-1);
+    if (last && last.id === m.tournament.id) last.rows.push(m);
+    else
+      groups.push({
+        id: m.tournament.id,
+        name: m.tournament.name ?? "Tournament",
+        rows: [m],
+      });
+  }
   return (
-    <ul className="divide-y border-t" aria-label="Matches, newest first">
-      {matches.map((m) => {
-        const note = statusNote(m.status);
-        const noScore = m.status === "winner_only";
+    <section aria-label="Matches, newest first">
+      {groups.map((g, i) => {
+        const won = g.rows.filter((m) => m.result === "won").length;
+        const lost = g.rows.filter((m) => m.result === "lost").length;
         return (
-          <li
-            key={m.id}
-            className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 py-3.5 transition-colors duration-150 hover:bg-card sm:grid-cols-[6.5rem_1fr_auto_auto] sm:items-center sm:px-2"
-          >
-            <span className="num text-[13px] text-muted-foreground">
-              {formatDate(m.played_on)}
-            </span>
-            <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
-              <p className="truncate text-[15px]">
-                <span className="text-subtle">vs </span>
-                <span className="font-medium">
-                  <People people={m.opponents} />
-                </span>
-                {m.partners.length > 0 && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · with <People people={m.partners} />
-                  </span>
-                )}
-              </p>
-              <p className="truncate text-[12px] text-subtle">
-                {m.event}
-                {m.round ? ` · ${m.round}` : ""}
-                {note ? ` · ${note}` : ""}
-                {" · "}
-                <Link
-                  href={`/tournaments/${m.tournament.id}`}
-                  className="hover:text-foreground hover:underline"
-                >
-                  {m.tournament.name ?? "Tournament"}
-                </Link>
-              </p>
+          <div key={`${g.id}-${i}`} className="mt-3 first:mt-0">
+            <div className="flex items-baseline justify-between gap-3 bg-wash px-2 py-1.5">
+              <Link
+                href={`/tournaments/${g.id}`}
+                className="min-w-0 truncate text-[14px] font-semibold hover:underline"
+              >
+                {g.name}
+              </Link>
+              <span className="num shrink-0 text-[12px] text-muted-foreground">
+                {formatDate(g.rows.at(-1)?.played_on)} · {won}–{lost}
+              </span>
             </div>
-            <span className="col-start-2 row-start-1 justify-self-end text-[15px] sm:col-start-3">
-              {noScore ? (
-                <span className="text-[12px] text-subtle">
-                  Score unavailable
-                </span>
-              ) : (
-                <Score games={m.games} />
-              )}
-            </span>
-            <span
-              className="col-start-2 row-start-2 justify-self-end sm:col-start-4 sm:row-start-1"
-              title={`Source: ${m.source}`}
-            >
-              <ResultBadge status={m.status} result={m.result ?? null} />
-            </span>
-          </li>
+            <ul>
+              {g.rows.map((m) => (
+                <MatchRow key={m.id} m={m} />
+              ))}
+            </ul>
+          </div>
         );
       })}
-    </ul>
+    </section>
   );
 }
 
-function Tournaments({ id, profile }: { id: number; profile: PlayerProfile }) {
+function MatchRow({ m }: { m: PlayerMatch }) {
+  const note = statusNote(m.status);
   return (
-    <Section title="Tournaments">
-      {profile.tournament_history.length === 0 ? (
-        <p className="py-4 text-[14px] text-muted-foreground">None recorded.</p>
-      ) : (
-        <ul className="divide-y text-[14px]">
-          {profile.tournament_history.map((t) => (
-            <li
-              key={t.id}
-              className="flex items-center justify-between gap-3 py-3"
-            >
-              <span className="min-w-0">
-                <Link
-                  href={`/tournaments/${t.id}`}
-                  className="block truncate hover:underline"
-                >
-                  {t.name ?? `Tournament ${t.id}`}
-                </Link>
-                <span className="num text-[12px] text-subtle">
-                  {formatDate(t.start_date)}
-                </span>
-              </span>
-              <Link
-                href={`/players/${id}?tournament=${t.id}`}
-                className="num shrink-0 text-[13px] text-muted-foreground hover:text-foreground"
-                aria-label={`${t.won}–${t.lost}: show matches at ${t.name ?? "this tournament"}`}
-              >
-                <span className="text-win">{t.won}</span>–
-                <span className="text-loss">{t.lost}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Section>
-  );
-}
-
-function Opponents({ profile }: { profile: PlayerProfile }) {
-  return (
-    <Section title="Frequent opponents">
-      {profile.opponents.length === 0 ? (
-        <p className="py-4 text-[14px] text-muted-foreground">
-          No decided matches yet.
-        </p>
-      ) : (
-        <ul className="divide-y text-[14px]">
-          {profile.opponents.map((o) => (
-            <li
-              key={o.id}
-              className="flex items-center justify-between gap-3 py-3"
-            >
-              <Link
-                href={`/players/${o.id}`}
-                className="truncate hover:underline"
-              >
-                {o.name}
-              </Link>
-              <span
-                className="num shrink-0 text-[13px]"
-                title={`${o.played} decided matches`}
-              >
-                <span className="text-win">{o.won}</span>
-                <span className="text-subtle">–</span>
-                <span className="text-loss">{o.lost}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="pt-3 text-[12px] text-subtle">
-        Head-to-head from this player’s side, decided matches only.
-      </p>
-    </Section>
+    <li className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 border-b border-border px-2 py-2 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto_auto]">
+      <span className="num hidden text-[13px] text-muted-foreground sm:block">
+        {formatDate(m.played_on).replace(/ \d{4}$/, "")}
+      </span>
+      <span className="min-w-0 leading-snug">
+        <span className="block truncate">
+          <span className="text-subtle">vs </span>
+          <People people={m.opponents} />
+        </span>
+        <span className="block truncate text-[12px] text-subtle">
+          {m.event}
+          {m.round ? ` · ${m.round}` : ""}
+          {m.partners.length > 0 && (
+            <>
+              {" · with "}
+              <People people={m.partners} />
+            </>
+          )}
+        </span>
+      </span>
+      <span className="justify-self-end" title={`Source: ${m.source}`}>
+        {note && m.games.length === 0 ? (
+          <StatusNote>{note}</StatusNote>
+        ) : (
+          <span className="flex items-center gap-2">
+            {note && <StatusNote>{note}</StatusNote>}
+            <GameSheet games={m.games} you />
+          </span>
+        )}
+      </span>
+      <span className="justify-self-end">
+        <ResultBadge status={m.status} result={m.result ?? null} />
+      </span>
+    </li>
   );
 }
 
 function ProfileSkeleton() {
   return (
-    <>
-      <Hero>
-        <div
-          className="flex items-end gap-6 pb-16"
-          role="status"
-          aria-busy="true"
-        >
-          <span className="sr-only">Loading player…</span>
-          <Skeleton className="size-28 rounded-xl bg-white/10" />
-          <div className="space-y-3">
-            <Skeleton className="h-3 w-24 bg-white/10" />
-            <Skeleton className="h-14 w-80 max-w-full bg-white/10" />
-          </div>
-        </div>
-      </Hero>
-      <Container>
-        <RowsSkeleton rows={8} />
-      </Container>
-    </>
+    <div className="space-y-4" role="status" aria-busy="true">
+      <span className="sr-only">Loading player…</span>
+      <Skeleton className="h-11 w-80 max-w-full bg-muted" />
+      <Skeleton className="h-4 w-64 bg-muted" />
+      <Skeleton className="h-12 w-full bg-muted" />
+      <RowsSkeleton rows={8} />
+    </div>
   );
 }

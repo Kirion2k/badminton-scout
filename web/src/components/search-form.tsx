@@ -1,8 +1,5 @@
 import { Search } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-
 /** Player search. A plain GET form: works before JavaScript loads, and the URL is the state. */
 export function SearchForm({
   defaultValue,
@@ -13,6 +10,7 @@ export function SearchForm({
   autoFocus?: boolean;
   compact?: boolean;
 }) {
+  const id = compact ? "q-compact" : "q";
   return (
     <form
       action="/"
@@ -20,16 +18,16 @@ export function SearchForm({
       role="search"
       className="flex w-full items-center gap-2"
     >
-      <label htmlFor={compact ? "q-compact" : "q"} className="sr-only">
+      <label htmlFor={id} className="sr-only">
         Search players by name
       </label>
       <div className="relative flex-1">
         <Search
           aria-hidden
-          className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${compact ? "left-3 size-4 text-on-dark-muted" : "left-4 size-5 text-subtle"}`}
+          className={`pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-subtle ${compact ? "size-4" : "size-5"}`}
         />
-        <Input
-          id={compact ? "q-compact" : "q"}
+        <input
+          id={id}
           name="q"
           data-player-search
           type="search"
@@ -41,30 +39,30 @@ export function SearchForm({
           autoComplete="off"
           spellCheck={false}
           placeholder={
-            compact ? "Search players…" : "Player name, e.g. a surname…"
+            compact ? "Search players" : "Player name, e.g. a surname"
           }
           className={
             compact
-              ? "h-10 rounded-lg border-white/10 bg-night-2 pr-10 pl-9 text-on-dark placeholder:text-on-dark-muted [&::-webkit-search-cancel-button]:hidden"
-              : "h-14 rounded-xl border-0 bg-card pl-12 text-[17px] shadow-[0_8px_24px_-12px_rgb(0_0_0/0.5)]"
+              ? "control w-full pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
+              : "control h-12 w-full pl-10 text-[17px]"
           }
         />
         {compact && (
           <kbd
             aria-hidden
-            className="pointer-events-none absolute top-1/2 right-2.5 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center rounded border border-white/15 px-1.5 font-sans text-[11px] text-on-dark-muted"
+            className="pointer-events-none absolute top-1/2 right-2.5 hidden h-5 min-w-5 -translate-y-1/2 items-center justify-center rounded border px-1.5 font-sans text-[11px] text-subtle sm:flex"
           >
             /
           </kbd>
         )}
       </div>
       {!compact && (
-        <Button
+        <button
           type="submit"
-          className="h-14 rounded-xl bg-lime px-7 font-display text-[17px] font-bold tracking-[0.06em] text-night uppercase hover:bg-lime/90"
+          className="h-12 rounded-md bg-form px-6 text-[15px] font-semibold text-white transition-colors hover:bg-form/90"
         >
           Search
-        </Button>
+        </button>
       )}
     </form>
   );

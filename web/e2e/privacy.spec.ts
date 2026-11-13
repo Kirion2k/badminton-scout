@@ -38,7 +38,7 @@ test("a para match now counts in the opponent's history", async ({ page }) => {
   // Sam played Para ATHLETE in a para event: 4 adult matches plus that one
   await page.goto(`/players/${ids().sam}`);
   const items = page
-    .getByRole("list", { name: "Matches, newest first" })
+    .getByRole("region", { name: "Matches, newest first" })
     .getByRole("listitem");
   await expect(items).toHaveCount(5);
 });

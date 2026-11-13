@@ -28,13 +28,13 @@ test("discover → search → profile → match → tournament → another playe
   // decided matches only: the cancelled match is neither won nor lost
   await expect(page.locator('dt:text-is("Record") + dd')).toHaveText("4–2");
 
-  const history = page.getByRole("list", { name: "Matches, newest first" });
+  const history = page.getByRole("region", { name: "Matches, newest first" });
   await expect(
     history.getByTitle("Cancelled or not played: no result"),
   ).toBeVisible(); // not a loss
   await expect(history.getByText("W ret.")).toBeVisible(); // retirement keeps its W, marked
   await expect(history.getByText("W/O")).toBeVisible(); // walkover, marked
-  await expect(history.getByText("21–15 · 21–18")).toBeVisible(); // score from Alex's side
+  await expect(history.getByTitle("21–15 · 21–18")).toBeVisible(); // score from Alex's side
 
   await history
     .getByRole("link", { name: "Synthetic Spring Open 2026" })
@@ -66,7 +66,7 @@ test("a merged player's old URL redirects to the canonical profile", async ({
   // both identities' matches now belong to one profile
   await expect(
     page
-      .getByRole("list", { name: "Matches, newest first" })
+      .getByRole("region", { name: "Matches, newest first" })
       .getByRole("listitem"),
   ).toHaveCount(2);
 });
@@ -79,7 +79,7 @@ test("filters narrow the match history and can be cleared", async ({
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page).toHaveURL(/result=lost/);
   const rows = page
-    .getByRole("list", { name: "Matches, newest first" })
+    .getByRole("region", { name: "Matches, newest first" })
     .getByRole("listitem");
   await expect(rows).toHaveCount(2);
   for (const row of await rows.all())
@@ -143,8 +143,12 @@ test("coverage explains sources and freshness", async ({ page }) => {
     page.getByText("Pending technical access").first(),
   ).toBeVisible();
   // the fixture has never been synced: freshness says so instead of inventing a time
-  await expect(page.locator("#main").getByText("No sync has run yet")).toBeVisible();
-  await expect(page.locator("#main").getByText("No schedule configured")).toBeVisible();
+  await expect(
+    page.locator("#main").getByText("No sync has run yet"),
+  ).toBeVisible();
+  await expect(
+    page.locator("#main").getByText("No schedule configured"),
+  ).toBeVisible();
 });
 
 test("out-of-range parameters degrade gracefully instead of erroring", async ({
@@ -159,4 +163,18 @@ test("out-of-range parameters degrade gracefully instead of erroring", async ({
   await expect(page.getByText("No more matches")).toBeVisible();
   await page.goto("/tournaments?page=999");
   await expect(page.getByText("No more tournaments")).toBeVisible();
+});
+
+test("a result row opens to its scoresheet and closes again", async ({
+  page,
+}) => {
+  await page.goto(`/tournaments/${ids().spring}`);
+  const toggle = page.getByRole("button", { name: "Scoresheet: 21–15 21–18" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const panel = page.locator(`#${await toggle.getAttribute("aria-controls")}`);
+  await expect(panel.getByTitle("21–15 · 21–18")).toBeVisible();
+  await toggle.press("Enter");
+  await expect(panel).toBeHidden();
 });

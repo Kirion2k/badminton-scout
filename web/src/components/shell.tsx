@@ -3,62 +3,33 @@ import type { ReactNode } from "react";
 
 import { TopBar } from "@/components/site-header";
 
-/** Page frame. `hero` renders full-bleed under the top bar, before the main column. */
+/** Page frame: the bar, one main column, and a footer that points at the sources. */
 export function Shell({
   children,
-  hero,
   showSearch = true,
 }: {
-  children?: ReactNode;
-  hero?: ReactNode;
+  children: ReactNode;
   showSearch?: boolean;
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <TopBar showSearch={showSearch} />
       <main id="main" className="flex-1">
-        {hero}
-        {children && <Container>{children}</Container>}
+        <div className="mx-auto w-full max-w-[1240px] px-4 pt-6 pb-28 sm:px-8 lg:pt-8 lg:pb-16">
+          {children}
+        </div>
       </main>
-      <footer className="border-t bg-card">
-        <div className="mx-auto flex w-full max-w-[1240px] flex-wrap justify-between gap-x-6 gap-y-1 px-4 pt-5 pb-24 text-xs text-subtle sm:px-8 lg:pb-6">
-          <p>Results are shown as published by their source.</p>
-          <Link
-            href="/coverage"
-            className="hover:text-foreground hover:underline"
-          >
-            Sources and data freshness
+      <footer className="border-t">
+        <div className="mx-auto flex w-full max-w-[1240px] flex-wrap justify-between gap-x-6 gap-y-1 px-4 pt-4 pb-24 text-xs text-subtle sm:px-8 lg:pb-5">
+          <p>
+            Mynton shows results as each federation published them. Absent data
+            is marked, never filled in.
+          </p>
+          <Link href="/coverage" className="underline">
+            Sources and freshness
           </Link>
         </div>
       </footer>
     </div>
-  );
-}
-
-/** The page column. */
-export function Container({ children }: { children: ReactNode }) {
-  return (
-    <div className="mx-auto w-full max-w-[1240px] px-4 pt-8 pb-28 sm:px-8 lg:pt-10 lg:pb-16">
-      {children}
-    </div>
-  );
-}
-
-/** A full-bleed dark band with the court drawn in, and the page's width inside. */
-export function Hero({
-  tone = "night",
-  children,
-}: {
-  tone?: "night" | "court";
-  children: ReactNode;
-}) {
-  return (
-    <section
-      className={`on-dark court-lines relative overflow-hidden text-on-dark ${tone === "court" ? "bg-court" : "bg-night"}`}
-    >
-      <div className="relative mx-auto w-full max-w-[1240px] px-4 pt-8 sm:px-8 lg:pt-12">
-        {children}
-      </div>
-    </section>
   );
 }
