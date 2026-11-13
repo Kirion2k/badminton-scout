@@ -365,3 +365,22 @@ async def test_tournament_list_sorting(api: httpx.AsyncClient) -> None:
     oldest = ids((await api.get("/v1/tournaments", params={"sort": "oldest"})).json())
     assert oldest == list(reversed(newest))
     assert (await api.get("/v1/tournaments", params={"sort": "nope"})).status_code == 422
+
+
+async def test_a_winner_without_a_score_counts_and_says_so(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    alex = player_id(data, "Alex TESTER")
+    before = (await api.get(f"/v1/players/{alex}")).json()["record"]
+    run = IngestRun(source_id="synthetic")
+    data.add(run)
+    data.flush()
+    winner_only = row(draw=40, round_="Final", points=(), winner=1)  # no games, winner marked
+    item = TsMatchRow.model_validate(winner_only)
+    ingest_rows(data, run, date(2026, 1, 6), [item], [winner_only])
+    data.flush()
+    after = (await api.get(f"/v1/players/{alex}")).json()["record"]
+    assert (after["played"], after["won"]) == (before["played"] + 1, before["won"] + 1)
+    history = (await api.get(f"/v1/players/{alex}/matches")).json()["items"]
+    final = next(m for m in history if m["round"] == "Final" and m["status"] == "winner_only")
+    assert final["games"] == [] and final["result"] == "won"

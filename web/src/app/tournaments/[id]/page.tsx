@@ -335,7 +335,6 @@ function MatchCard({
   const note = statusNote(m.status);
   const side1 = m.games.map(([a]) => a);
   const side2 = m.games.map(([, b]) => b);
-  const noScore = m.games.length === 0 && m.status === "completed";
   return (
     <li className="rounded-[10px] bg-card px-4 py-3.5 ring-1 ring-border [contain-intrinsic-size:auto_104px] [content-visibility:auto] sm:px-5">
       <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-subtle">
@@ -352,11 +351,6 @@ function MatchCard({
         {note && (
           <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
             {note}
-          </span>
-        )}
-        {noScore && (
-          <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
-            Score unavailable
           </span>
         )}
       </div>

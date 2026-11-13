@@ -162,6 +162,11 @@ def test_cancelled_match_is_not_played() -> None:
     assert (m.status, m.winner_side) == ("not_played", None)
 
 
+def test_a_winner_without_a_score_is_a_verified_result() -> None:
+    m = norm(row(points=(), winner=2))  # the source marks the winner, publishes no games
+    assert (m.status, m.winner_side, m.games) == ("winner_only", 2, ())
+
+
 def test_dutch_retirement_is_retired() -> None:
     # badvla.tournamentsoftware.com, 2026-11-13: "Opgave" after games were played
     m = norm(row(points=(21, 15, 8, 3), winner=1, message="Opgave"))
@@ -193,8 +198,6 @@ def test_disqualification_keeps_its_winner_and_the_games_played() -> None:
     ("data", "kind"),
     [
         (row(points=(), message="Suspended"), "unknown_message"),
-        (row(points=()), "winner_without_play"),
-        (row(points=(), winner=1), "winner_without_play"),  # a winner, no score, no word
         (row(winner=2), "winner_disagrees_with_score"),
     ],
 )

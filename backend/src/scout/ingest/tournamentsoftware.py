@@ -31,7 +31,7 @@ from scout.models import (
 from scout.privacy import canonical_event, is_redistributable_event
 from scout.sources import SOURCES
 
-Status = Literal["completed", "walkover", "retired", "disqualified", "not_played"]
+Status = Literal["completed", "walkover", "retired", "disqualified", "winner_only", "not_played"]
 
 # event-name prefixes; junior events use B/G for boys/girls
 _DISCIPLINES = {
@@ -180,6 +180,9 @@ def normalize(
         # cancelled, yet one side advanced: a walkover. German portals add a nominal 21-0 21-0,
         # which was never played, so no games are kept (seen on ba., dbv., cbbd., 2026-11-13)
         status, games = "walkover", ()
+    if not message and status == "not_played" and len(winners) == 1:
+        # the source marks a winner but publishes no score: a verified result, score unavailable
+        status = "winner_only"
     if status == "not_played" and winners:
         return Rejection("winner_without_play", "a match with no games or outcome marks a winner")
     if status != "not_played" and len(winners) != 1:

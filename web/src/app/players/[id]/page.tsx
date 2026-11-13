@@ -367,7 +367,7 @@ function MatchHistory({ matches }: { matches: PlayerMatch[] }) {
     <ul className="divide-y border-t" aria-label="Matches, newest first">
       {matches.map((m) => {
         const note = statusNote(m.status);
-        const noScore = m.games.length === 0 && m.status === "completed";
+        const noScore = m.status === "winner_only";
         return (
           <li
             key={m.id}

@@ -217,7 +217,8 @@ class Match(Base):
     __tablename__ = "match"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('completed', 'walkover', 'retired', 'disqualified', 'not_played')",
+            "status IN ('completed', 'walkover', 'retired', 'disqualified', 'winner_only', "
+            "'not_played')",
             name="status_valid",
         ),
         CheckConstraint("winner_side IN (1, 2)", name="winner_side_valid"),

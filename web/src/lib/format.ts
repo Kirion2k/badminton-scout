@@ -91,6 +91,13 @@ export function resultLabel(status: string, result: Outcome): ResultLabel {
       title: won ? "Won by walkover" : "Lost by walkover",
     };
   }
+  if (status === "winner_only") {
+    return {
+      text: won ? "W" : "L",
+      tone,
+      title: won ? "Won (score unavailable)" : "Lost (score unavailable)",
+    };
+  }
   if (status === "disqualified") {
     return {
       text: won ? "W DQ" : "L DQ",
@@ -114,6 +121,8 @@ export function statusNote(status: string): string | null {
       return "Walkover";
     case "disqualified":
       return "Disqualified";
+    case "winner_only":
+      return "Score unavailable";
     case "retired":
       return "Retired";
     case "not_played":
