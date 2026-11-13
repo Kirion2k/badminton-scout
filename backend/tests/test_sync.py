@@ -385,3 +385,27 @@ def test_backfill_stops_at_the_floor(
     portal.searches.clear()
     run = sync(engine, session, portal, on=WWW)
     assert portal.searches == []  # nothing left to search, and discovery already ran today
+
+
+def test_owners_are_checked_before_searching_further_back(
+    engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scout.ingest.operations import TsTournament
+    from scout.ingest.runner import record_discovered
+
+    monkeypatch.setattr(sync_module, "BACKFILL_SEARCHES", 1)
+    unrouted = TsTournament.model_validate(entry(OTHER, PAST, PAST))
+    record_discovered(session, "tournamentsoftware", [unrouted], None)  # the backlog
+    session.commit()
+    portal = Portal()
+
+    def probe(guid: str) -> str:
+        portal.calls.append("ownerCheck")
+        return "www.tournamentsoftware.com"
+
+    portal.days[OTHER] = {}
+    sync(engine, session, portal, on=WWW, probe=probe)
+    searches = [i for i, c in enumerate(portal.calls) if c == "findBadmintonTournaments"]
+    # daily discovery, then the owner check, then the history search
+    assert portal.calls.index("ownerCheck") < searches[-1]
+    assert len(searches) == 2

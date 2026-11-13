@@ -38,7 +38,7 @@ SETTLE_AFTER = timedelta(days=3)
 REFRESH_EVERY = timedelta(hours=20)
 REFRESH_LOOKBACK = timedelta(days=30)
 # One request each, and each routes a tournament to its portal's own import budget (ba., bnz.)
-OWNER_CHECKS = 800
+OWNER_CHECKS = 4_000  # the budget stops it first; at 6,000 a day the backlog clears in a day
 # History: each www pass also searches older weeks, back from where the last pass stopped. The
 # www search is global, so it finds tournaments owned by ba. as well (routed to the BA source).
 BACKFILL_FLOOR = date(2005, 1, 1)  # Tournament Software's results do not go back further
@@ -177,13 +177,14 @@ def _pass(
         except ProviderError as e:
             session.rollback()
             counts[f"discovery:failed:{type(e).__name__}"] += 1  # refresh and queue still run
-    if portal.source_id == "tournamentsoftware":
-        counts += _backfill(session, provider, portal, run)
+    # owners first: a found-but-unchecked listing is the backlog; more history only adds to it
     if probe is not None:
         counts += resolve_owners(session, probe, limit=OWNER_CHECKS)
         if counts["owners:stopped_budget_exhausted"]:
             counts["stopped:budget_exhausted"] += 1
             return counts
+    if portal.source_id == "tournamentsoftware":
+        counts += _backfill(session, provider, portal, run)
     left = max_tournaments
     # at most half the slots: corrections must not starve the backlog
     for row in refresh_due(session, portal.source_id, now)[: max(1, max_tournaments // 2)]:

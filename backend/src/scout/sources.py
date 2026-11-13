@@ -46,6 +46,9 @@ _DAILY_BUDGET = 300
 # Owner instruction 2026-11-13: use as much as possible to grow coverage. Kept at the same 5 s
 # spacing (≈2.8 h of requests a day), so one portal never sees more than one request at a time.
 _TS_IMPORT_BUDGET = 2_000
+# Owner instruction 2026-11-13 (second): the global site carries the history search and every
+# owner check, so it gets more of the day (≈8.3 h at the same 5 s spacing, well under 17,280).
+_TS_GLOBAL_BUDGET = 6_000
 
 # National federations' own Tournament Software portals (ADR-0008, 2026-11-13 amendments): the
 # owner's federation authorisation. A portal is listed only after it was seen owning tournaments
@@ -99,7 +102,7 @@ SOURCES: Mapping[str, SourceRights] = MappingProxyType(
             )
             # separate sources: identifiers and routes are not assumed to be shared across hosts
             for source_id, host, budget in (
-                ("tournamentsoftware", "www.tournamentsoftware.com", _TS_IMPORT_BUDGET),
+                ("tournamentsoftware", "www.tournamentsoftware.com", _TS_GLOBAL_BUDGET),
                 ("tournamentsoftware_ba", "ba.tournamentsoftware.com", _TS_IMPORT_BUDGET),
                 ("tournamentsoftware_bwf", "bwf.tournamentsoftware.com", _DAILY_BUDGET),
             )
