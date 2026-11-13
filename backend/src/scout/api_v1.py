@@ -124,6 +124,7 @@ class EventSummary(BaseModel):
     name: str
     discipline: str | None
     matches: int
+    winner: list[PlayerRef] | None = None  # the published final's winning side; never inferred
 
 
 ImportStatus = Literal["complete", "complete_with_gaps", "partial", "in_progress"]
@@ -643,6 +644,7 @@ def tournament_detail(db: DB, tournament_id: int) -> TournamentDetail:
     ).all()
     if not events:
         raise HTTPException(404, "no such tournament")  # also hides junior-only tournaments
+    winners = _event_winners(db, tournament_id)
     source = db.get(Source, t.source_id)
     return TournamentDetail(
         id=t.id,
@@ -651,11 +653,41 @@ def tournament_detail(db: DB, tournament_id: int) -> TournamentDetail:
         location=t.location,
         start_date=t.start_date,
         end_date=t.end_date,
-        events=[EventSummary(name=n, discipline=d, matches=c) for n, d, c in events],
+        events=[
+            EventSummary(name=n, discipline=d, matches=c, winner=winners.get(n))
+            for n, d, c in events
+        ],
         source=source.attribution if source else t.source_id,
         source_id=t.source_id,
         import_state=_import_states(db, [t]).get(t.id),
     )
+
+
+_FINAL_ROUNDS = ("final", "finale", "finals", "f")
+
+
+def _event_winners(db: Session, tournament_id: int) -> dict[str, list[PlayerRef]]:
+    """Each event's winner, read from its one published, decided final. Groups and events whose
+    final is missing, undecided or ambiguous get no entry: a winner is never inferred."""
+    finals = db.execute(
+        select(Event.name, Match.id, Match.winner_side)
+        .join(Event, Event.id == Match.event_id)
+        .where(
+            Event.tournament_id == tournament_id,
+            Match.id.in_(_visible_matches()),
+            func.lower(func.trim(Match.round)).in_(_FINAL_ROUNDS),
+        )
+    ).all()
+    by_event: dict[str, list[tuple[int, int | None]]] = defaultdict(list)
+    for name, match_id, side in finals:
+        by_event[name].append((match_id, side))
+    decided = {
+        n: (ms[0][0], side)
+        for n, ms in by_event.items()
+        if len(ms) == 1 and (side := ms[0][1]) in (1, 2)
+    }
+    people, _ = _people_and_games(db, [mid for mid, _ in decided.values()])
+    return {n: people[(mid, side)] for n, (mid, side) in decided.items() if people[(mid, side)]}
 
 
 def _visible_tournaments() -> Select[int, int, int]:

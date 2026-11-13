@@ -221,6 +221,8 @@ export interface components {
       matches: number;
       /** Name */
       name: string;
+      /** Winner */
+      winner?: components["schemas"]["PlayerRef"][] | null;
     };
     /** HTTPValidationError */
     HTTPValidationError: {

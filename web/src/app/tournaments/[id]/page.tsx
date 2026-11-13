@@ -14,11 +14,7 @@ import {
 import { People, ResultRow } from "@/components/scoresheet";
 import { Shell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  type TournamentDetail,
-  type TournamentMatch,
-  api,
-} from "@/lib/api/client";
+import { type TournamentDetail, api } from "@/lib/api/client";
 import { DISCIPLINES, formatDateRange, one, positiveInt } from "@/lib/format";
 import { FEDERATION, importFlag } from "@/lib/providers";
 import { cn } from "@/lib/utils";
@@ -78,6 +74,11 @@ async function Tournament({
   const groups = selected
     ? groupBy(matches.items, (m) => m.round ?? "Round not recorded")
     : groupBy(matches.items, (m) => m.event);
+  const winners = new Map(
+    detail.events
+      .filter((e) => e.winner?.length)
+      .map((e) => [e.name, e.winner!]),
+  );
   const title = selected
     ? selected.name
     : discipline
@@ -100,13 +101,7 @@ async function Tournament({
               {matches.total === 1 ? "match" : "matches"} · winner first
             </span>
           </div>
-          {selected && (
-            <EventWinner
-              event={selected.name}
-              rows={matches.items}
-              lastPage={page * PAGE_SIZE >= matches.total}
-            />
-          )}
+          {selected && <EventWinner event={selected} />}
           {matches.items.length === 0 ? (
             <EmptyState
               title={
@@ -129,6 +124,14 @@ async function Tournament({
                   {!selected && rows[0].discipline && (
                     <span className="text-[12px] font-normal text-subtle [font-stretch:100%]">
                       {DISCIPLINES[rows[0].discipline] ?? rows[0].discipline}
+                    </span>
+                  )}
+                  {!selected && winners.get(name) && (
+                    <span className="text-[13px] font-normal text-muted-foreground [font-stretch:100%]">
+                      won by{" "}
+                      <span className="font-semibold text-foreground">
+                        <People people={winners.get(name)!} />
+                      </span>
                     </span>
                   )}
                 </h3>
@@ -171,44 +174,24 @@ async function Tournament({
   );
 }
 
-const FINAL = /^(final|finale|finals|f)$/i;
 // a group stage or pool has no final by design: saying one is missing would misdescribe it
 const GROUP = /\b(group|pool|poule|gruppe|groep|grupo)\b/i;
 
-/** An event's winner, read from its final when the source publishes one; never inferred. */
-function EventWinner({
-  event,
-  rows,
-  lastPage,
-}: {
-  event: string;
-  rows: TournamentMatch[];
-  lastPage: boolean;
-}) {
-  const final = rows.find((m) => FINAL.test((m.round ?? "").trim()));
-  if (!final) {
-    return lastPage && !GROUP.test(event) ? (
-      <p className="px-2 pt-2 text-[13px] text-subtle">
-        No final is published for this event, so no winner is named.
-      </p>
-    ) : null;
-  }
-  const side =
-    final.winner_side === 1
-      ? final.side1
-      : final.winner_side === 2
-        ? final.side2
-        : null;
-  return (
-    <p className="px-2 pt-2 text-[14px]">
-      <span className="text-muted-foreground">Winner </span>
-      {side ? (
+/** An event's winner as the API reads it from the one published, decided final; never inferred. */
+function EventWinner({ event }: { event: TournamentDetail["events"][number] }) {
+  if (event.winner?.length)
+    return (
+      <p className="px-2 pt-2 text-[14px]">
+        <span className="text-muted-foreground">Winner </span>
         <span className="font-semibold">
-          <People people={side} />
+          <People people={event.winner} />
         </span>
-      ) : (
-        <span className="text-subtle">not decided in the published final</span>
-      )}
+      </p>
+    );
+  if (GROUP.test(event.name)) return null;
+  return (
+    <p className="px-2 pt-2 text-[13px] text-subtle">
+      No decided final is published for this event, so no winner is named.
     </p>
   );
 }
@@ -404,6 +387,7 @@ function Events({
               current={view.event === e.name}
               label={e.name}
               count={e.matches}
+              winner={e.winner?.map((p) => p.name).join(" / ")}
             />
           ))}
         </ul>
@@ -417,11 +401,13 @@ function EventLink({
   current,
   label,
   count,
+  winner,
 }: {
   href: string;
   current: boolean;
   label: string;
   count: number;
+  winner?: string;
 }) {
   return (
     <li className="shrink-0 lg:border-b lg:border-border">
@@ -429,13 +415,20 @@ function EventLink({
         href={href}
         aria-current={current ? "page" : undefined}
         className={cn(
-          "relative flex h-10 items-center justify-between gap-3 rounded-md px-3 text-[14px] whitespace-nowrap ring-1 ring-border hover:no-underline lg:h-9 lg:rounded-none lg:px-1 lg:ring-0",
+          "relative flex h-10 items-center justify-between gap-3 rounded-md px-3 text-[14px] whitespace-nowrap ring-1 ring-border hover:no-underline lg:h-auto lg:min-h-9 lg:rounded-none lg:px-1 lg:py-1.5 lg:ring-0",
           current
             ? "bg-form font-semibold text-white lg:bg-transparent lg:text-form"
             : "hover:bg-wash",
         )}
       >
-        <span className="truncate">{label}</span>
+        <span className="min-w-0">
+          <span className="block truncate">{label}</span>
+          {winner && (
+            <span className="hidden truncate text-[12px] font-normal text-muted-foreground lg:block">
+              won by {winner}
+            </span>
+          )}
+        </span>
         <span
           className={cn(
             "num text-[12px]",
