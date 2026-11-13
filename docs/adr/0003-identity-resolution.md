@@ -2,6 +2,8 @@
 
 Status: Accepted (revised 2026-11-12) · Schema implemented in M2/M4, not M0
 
+Amended 2026-11-13 by [ADR-0011](0011-automatic-identity-resolution.md): automatic links on stable identifiers; name-only links remain forbidden.
+
 ## Context
 Sources identify players differently. bwf-match-data uses display names only (9,251 strings). Of 31 pairs that share the same name words, most look like one person (`KIM Yong Hyun` / `Yong Hyun KIM`), and at least one likely isn't (`Yu Chen CHANG` / `Yu-Chang CHEN`). A wrong merge silently corrupts two players' records.
 
