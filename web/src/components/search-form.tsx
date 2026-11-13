@@ -26,7 +26,7 @@ export function SearchForm({
       <div className="relative flex-1">
         <Search
           aria-hidden
-          className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-subtle ${compact ? "left-3 size-4" : "left-4 size-5"}`}
+          className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${compact ? "left-3 size-4 text-on-dark-muted" : "left-4 size-5 text-subtle"}`}
         />
         <Input
           id={compact ? "q-compact" : "q"}
@@ -45,14 +45,14 @@ export function SearchForm({
           }
           className={
             compact
-              ? "h-10 rounded-lg bg-card pr-10 pl-9 shadow-[0_1px_2px_rgb(18_26_38/0.06)] [&::-webkit-search-cancel-button]:hidden"
-              : "h-14 rounded-xl bg-card pl-12 text-[17px] shadow-[0_1px_2px_rgb(18_26_38/0.05),0_8px_24px_-12px_rgb(18_26_38/0.18)]"
+              ? "h-10 rounded-lg border-white/10 bg-night-2 pr-10 pl-9 text-on-dark placeholder:text-on-dark-muted [&::-webkit-search-cancel-button]:hidden"
+              : "h-14 rounded-xl border-0 bg-card pl-12 text-[17px] shadow-[0_8px_24px_-12px_rgb(0_0_0/0.5)]"
           }
         />
         {compact && (
           <kbd
             aria-hidden
-            className="pointer-events-none absolute top-1/2 right-2.5 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center rounded border bg-muted px-1.5 font-sans text-[11px] text-subtle"
+            className="pointer-events-none absolute top-1/2 right-2.5 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center rounded border border-white/15 px-1.5 font-sans text-[11px] text-on-dark-muted"
           >
             /
           </kbd>
@@ -61,7 +61,7 @@ export function SearchForm({
       {!compact && (
         <Button
           type="submit"
-          className="h-14 rounded-xl px-7 text-[15px] font-medium"
+          className="h-14 rounded-xl bg-lime px-7 font-display text-[17px] font-bold tracking-[0.06em] text-night uppercase hover:bg-lime/90"
         >
           Search
         </Button>

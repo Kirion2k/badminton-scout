@@ -1,10 +1,4 @@
-import {
-  Building2,
-  CalendarDays,
-  Info,
-  ListOrdered,
-  MapPin,
-} from "lucide-react";
+import { Building2, CalendarDays, Info, MapPin } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -13,154 +7,93 @@ import { Suspense } from "react";
 import {
   BUTTON_QUIET,
   EmptyState,
-  MetaItem,
-  MetaRow,
-  PageHeader,
   Pager,
   RowsSkeleton,
   Select,
-  SourceNote,
 } from "@/components/bits";
-import { Shell } from "@/components/shell";
+import { Scoreboard } from "@/components/scoreboard";
+import { Container, Hero, Shell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  type TournamentDetail,
-  type TournamentMatch,
-  api,
-} from "@/lib/api/client";
-import {
-  DISCIPLINES,
-  formatDate,
-  formatDateRange,
-  formatScore,
-  one,
-  positiveInt,
-  statusNote,
-} from "@/lib/format";
+import { type TournamentDetail, api } from "@/lib/api/client";
+import { DISCIPLINES, formatDateRange, one, positiveInt } from "@/lib/format";
 import { FEDERATION, importFlag } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tournament" };
 
 const PAGE_SIZE = 60;
-const NAVIGATOR_LIMIT = 40; // more events than this: a menu instead of a list
+const CHIP_LIMIT = 24; // more events than this in one view: a menu instead of chips
+const ORDER = ["MS", "WS", "MD", "WD", "XD"];
 
 export default function TournamentPage({
   params,
   searchParams,
 }: PageProps<"/tournaments/[id]">) {
   return (
-    <Shell>
-      <Suspense
-        fallback={
-          <div className="space-y-6">
-            <Skeleton className="h-3 w-40 bg-muted" />
-            <Skeleton className="h-14 w-[36rem] max-w-full bg-muted" />
-            <Skeleton className="h-4 w-80 max-w-full bg-muted" />
-            <RowsSkeleton rows={8} />
-          </div>
-        }
-      >
-        <Tournament params={params} searchParams={searchParams} />
-      </Suspense>
-    </Shell>
+    <Shell
+      hero={
+        <Suspense fallback={<MatchCentreSkeleton />}>
+          <MatchCentre params={params} searchParams={searchParams} />
+        </Suspense>
+      }
+    />
   );
 }
 
-async function Tournament({
+type View = { discipline?: string; event?: string };
+
+function href(id: number, view: View) {
+  const q = new URLSearchParams();
+  if (view.discipline) q.set("discipline", view.discipline);
+  if (view.event) q.set("event", view.event);
+  const s = q.toString();
+  return `/tournaments/${id}${s ? `?${s}` : ""}`;
+}
+
+async function MatchCentre({
   params,
   searchParams,
 }: PageProps<"/tournaments/[id]">) {
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const sp = await searchParams;
-  const event = one(sp.event);
   const page = positiveInt(one(sp.page), 1);
   const detail = await api.tournament(id);
-  const known = detail.events.some((e) => e.name === event);
+  const selected = detail.events.find((e) => e.name === one(sp.event));
+  // an event implies its discipline; a discipline with no events here is ignored
+  const asked = one(sp.discipline);
+  const discipline =
+    selected?.discipline ??
+    (detail.events.some((e) => e.discipline === asked) ? asked : undefined);
+  const view: View = { discipline, event: selected?.name };
   const matches = await api.tournamentMatches(id, {
-    event: known ? event : undefined,
+    event: selected?.name,
+    discipline: selected ? undefined : discipline,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   });
-  const total = detail.events.reduce((n, e) => n + e.matches, 0);
-  const fed = FEDERATION[detail.source_id];
-  const flag = importFlag(detail.import_state);
-  // one event: its stages (rounds) are the groups; all events: each event is a group
-  const groups = known
+  // one event: its stages (rounds) are the groups; otherwise each event is a group
+  const groups = selected
     ? groupBy(matches.items, (m) => m.round ?? "Round not recorded")
     : groupBy(matches.items, (m) => m.event);
+  const title = selected
+    ? selected.name
+    : discipline
+      ? DISCIPLINES[discipline]
+      : "All matches";
 
   return (
     <>
-      <PageHeader
-        eyebrow={
-          fed
-            ? `${fed.country ?? "International"} · ${fed.label}`
-            : "Tournament"
-        }
-        title={detail.name ?? "Unnamed tournament"}
-      >
-        <MetaRow>
-          <MetaItem icon={CalendarDays} label="Dates">
-            <span className="num">
-              {formatDateRange(detail.start_date, detail.end_date)}
-            </span>
-          </MetaItem>
-          <MetaItem icon={MapPin} label="Location">
-            {detail.location ?? "Not recorded"}
-          </MetaItem>
-          {detail.organiser && (
-            <MetaItem icon={Building2} label="Organiser">
-              {detail.organiser}
-            </MetaItem>
-          )}
-          <MetaItem icon={ListOrdered} label="Size">
-            <span className="num">
-              {detail.events.length}{" "}
-              {detail.events.length === 1 ? "event" : "events"} ·{" "}
-              {total.toLocaleString("en-AU")} matches
-            </span>
-          </MetaItem>
-        </MetaRow>
-        <SourceNote>{detail.source}</SourceNote>
-        {flag && (
-          <p
-            role="note"
-            className="flex max-w-2xl items-start gap-2.5 rounded-lg bg-muted px-4 py-3 text-[14px] text-muted-foreground"
-          >
-            <Info
-              aria-hidden
-              className="mt-0.5 size-4 shrink-0 text-foreground"
-            />
-            <span>
-              <span className="font-medium text-foreground">{flag}.</span>{" "}
-              {detail.import_state?.note}
-              {detail.import_state?.status !== "complete_with_gaps" &&
-              detail.import_state?.unimported_matches
-                ? ` ${detail.import_state.unimported_matches} more could not be imported.`
-                : ""}{" "}
-              Counts on this page cover the matches we hold.
-            </span>
-          </p>
-        )}
-      </PageHeader>
-
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-12">
-        <EventNavigator
-          id={id}
-          detail={detail}
-          current={known ? event : undefined}
-        />
+      <TournamentHero id={id} detail={detail} view={view} />
+      <Container>
+        <EventChips id={id} detail={detail} view={view} />
+        <ImportNote detail={detail} />
         <section aria-labelledby="matches-heading" className="min-w-0">
-          <div className="flex items-baseline justify-between gap-3 border-b border-foreground/80 pb-2">
-            <h2
-              id="matches-heading"
-              className="display text-[22px] font-semibold"
-            >
-              {known ? event : "All matches"}
+          <div className="flex items-baseline justify-between gap-3 pb-1">
+            <h2 id="matches-heading" className="display text-[26px] uppercase">
+              {title}
             </h2>
-            <span className="num text-[13px] text-muted-foreground">
+            <span className="label-quiet num">
               {matches.total.toLocaleString("en-AU")}{" "}
               {matches.total === 1 ? "match" : "matches"}
             </span>
@@ -175,113 +108,297 @@ async function Tournament({
             />
           ) : (
             groups.map(([name, rows], i) => (
-              <section key={`${name}-${i}`} aria-label={name}>
-                <h3 className="sticky top-14 z-10 flex items-baseline gap-3 bg-background/95 pt-7 pb-3 backdrop-blur lg:top-0">
-                  <span className="label-quiet text-foreground">{name}</span>
-                  {!known && rows[0].discipline && (
-                    <span className="text-[12px] text-subtle">
+              <section key={`${name}-${i}`} aria-label={name} className="pt-6">
+                <h3 className="sticky top-14 z-10 -mx-1 flex items-center gap-3 bg-background/95 px-1 py-2.5 backdrop-blur lg:top-16">
+                  <span className="font-display text-[15px] font-bold tracking-[0.1em] uppercase">
+                    {name}
+                  </span>
+                  {!selected && rows[0].discipline && (
+                    <span className="label-quiet text-[11px]">
                       {DISCIPLINES[rows[0].discipline] ?? rows[0].discipline}
                     </span>
                   )}
+                  <span aria-hidden className="h-px flex-1 bg-border" />
                 </h3>
-                <ul className="grid grid-cols-[minmax(0,1fr)] gap-2.5">
+                <ul className="grid grid-cols-[minmax(0,1fr)] gap-2.5 lg:grid-cols-2">
                   {rows.map((m) => (
-                    <MatchCard key={m.id} match={m} showEvent={known} />
+                    <Scoreboard key={m.id} match={m} showRound={!selected} />
                   ))}
                 </ul>
               </section>
             ))
           )}
-          <Pager
-            path={`/tournaments/${id}`}
-            params={{ event: known ? event : undefined }}
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={matches.total}
-          />
+          <div className="mt-8">
+            <Pager
+              path={`/tournaments/${id}`}
+              params={{
+                discipline: selected ? undefined : discipline,
+                event: selected?.name,
+              }}
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={matches.total}
+            />
+          </div>
         </section>
-      </div>
+      </Container>
     </>
   );
 }
 
-/** Events grouped by discipline, so a 60-event tournament reads as five short lists. */
-function EventNavigator({
+/** The court-green header: identity, facts, provenance, and the discipline tabs on its edge. */
+function TournamentHero({
   id,
   detail,
-  current,
+  view,
 }: {
   id: number;
   detail: TournamentDetail;
-  current: string | undefined;
+  view: View;
 }) {
-  if (detail.events.length > NAVIGATOR_LIMIT) {
-    return (
-      <aside className="min-w-0">
-        <form
-          action={`/tournaments/${id}`}
-          method="get"
-          className="space-y-2 lg:sticky lg:top-8"
-        >
-          <label className="block">
-            <span className="label-quiet mb-2 block">
-              Event ({detail.events.length})
-            </span>
-            <Select
-              name="event"
-              defaultValue={current ?? ""}
-              className="w-full"
-            >
-              <option value="">All {detail.events.length} events</option>
-              {detail.events.map((e) => (
-                <option key={e.name} value={e.name}>
-                  {e.name} ({e.matches})
-                </option>
-              ))}
-            </Select>
-          </label>
-          <button type="submit" className={`${BUTTON_QUIET} w-full`}>
-            Show
-          </button>
-        </form>
-      </aside>
-    );
-  }
-  const byDiscipline = groupBy(
-    detail.events,
-    (e) => (e.discipline && DISCIPLINES[e.discipline]) || "Other events",
-  );
+  const fed = FEDERATION[detail.source_id];
+  const total = detail.events.reduce((n, e) => n + e.matches, 0);
+  const days =
+    detail.start_date && detail.end_date
+      ? Math.round(
+          (Date.parse(detail.end_date) - Date.parse(detail.start_date)) /
+            86_400_000,
+        ) + 1
+      : null;
+  const counts = new Map<string, number>();
+  for (const e of detail.events)
+    if (e.discipline && ORDER.includes(e.discipline))
+      counts.set(e.discipline, (counts.get(e.discipline) ?? 0) + e.matches);
+  const complete = detail.import_state?.status === "complete";
   return (
-    <aside className="min-w-0">
-      <nav aria-label="Events" className="lg:sticky lg:top-8">
-        <div className="-mx-4 flex scroll-px-4 gap-2 overflow-x-auto px-4 pb-2 lg:mx-0 lg:block lg:space-y-6 lg:overflow-visible lg:px-0">
-          <EventLink
-            href={`/tournaments/${id}`}
-            current={!current}
-            label="All events"
-            count={detail.events.reduce((n, e) => n + e.matches, 0)}
-          />
-          {byDiscipline.map(([discipline, events]) => (
-            <div key={discipline} className="contents lg:block">
-              <p className="label-quiet hidden pb-1.5 lg:block">{discipline}</p>
-              {events.map((e) => (
-                <EventLink
-                  key={e.name}
-                  href={`/tournaments/${id}?event=${encodeURIComponent(e.name)}`}
-                  current={current === e.name}
-                  label={e.name}
-                  count={e.matches}
-                />
-              ))}
-            </div>
-          ))}
+    <Hero tone="court">
+      <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
+        {fed ? `${fed.country ?? "International"} · ${fed.label}` : "Tournament"}
+      </p>
+      <h1 className="display mt-3 max-w-4xl text-[36px] leading-[0.98] text-balance sm:text-[52px]">
+        {detail.name ?? "Unnamed tournament"}
+      </h1>
+      <ul className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-[14px] text-on-court-muted">
+        <HeroMeta icon={CalendarDays} label="Dates">
+          <span className="num">
+            {formatDateRange(detail.start_date, detail.end_date)}
+          </span>
+        </HeroMeta>
+        <HeroMeta icon={MapPin} label="Location">
+          {detail.location ?? "Not recorded"}
+        </HeroMeta>
+        {detail.organiser && (
+          <HeroMeta icon={Building2} label="Organiser">
+            {detail.organiser}
+          </HeroMeta>
+        )}
+      </ul>
+      <dl className="mt-6 flex flex-wrap items-end gap-x-10 gap-y-4">
+        <HeroFact term="Events" value={detail.events.length} />
+        <HeroFact term="Matches" value={total} />
+        {days !== null && days > 0 && <HeroFact term="Days" value={days} />}
+        <div className="pb-1">
+          <dt className="sr-only">Import</dt>
+          <dd
+            className={cn(
+              "rounded px-2 py-1 font-display text-[12px] font-semibold tracking-[0.1em] uppercase",
+              complete ? "bg-lime text-night" : "bg-white/12 text-on-dark",
+            )}
+            title={detail.import_state?.note}
+          >
+            {complete
+              ? "Imported in full"
+              : (importFlag(detail.import_state) ?? "Import status unknown")}
+          </dd>
         </div>
+      </dl>
+      <p className="mt-5 text-[12px] text-on-court-muted">
+        Source {detail.source} ·{" "}
+        <Link
+          href="/coverage"
+          className="underline decoration-white/30 underline-offset-[3px] hover:text-on-dark"
+        >
+          About this data
+        </Link>
+      </p>
+      <nav
+        aria-label="Disciplines"
+        className="-mx-4 mt-7 flex scroll-px-4 gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+      >
+        <DisciplineTab
+          href={href(id, {})}
+          current={!view.discipline}
+          code="All"
+          name="All disciplines"
+          count={total}
+        />
+        {ORDER.filter((d) => counts.has(d)).map((d) => (
+          <DisciplineTab
+            key={d}
+            href={href(id, { discipline: d })}
+            current={view.discipline === d}
+            code={d}
+            name={DISCIPLINES[d]}
+            count={counts.get(d)!}
+          />
+        ))}
       </nav>
-    </aside>
+    </Hero>
   );
 }
 
-function EventLink({
+function HeroMeta({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex min-w-0 items-center gap-2">
+      <Icon aria-hidden className="size-4 shrink-0" />
+      <span className="sr-only">{label}: </span>
+      <span className="min-w-0 truncate text-on-dark">{children}</span>
+    </li>
+  );
+}
+
+function HeroFact({ term, value }: { term: string; value: number }) {
+  return (
+    <div className="flex flex-col-reverse">
+      <dt className="mt-1 font-display text-[12px] font-semibold tracking-[0.12em] text-on-court-muted uppercase">
+        {term}
+      </dt>
+      <dd className="reveal display num text-[40px] leading-none">
+        {value.toLocaleString("en-AU")}
+      </dd>
+    </div>
+  );
+}
+
+/** A discipline tab: the code big (MS, WD…), the full name for screen readers and on hover. The
+ * current tab takes the page colour, so it reads as the open folder of the match centre. */
+function DisciplineTab({
+  href,
+  current,
+  code,
+  name,
+  count,
+}: {
+  href: string;
+  current: boolean;
+  code: string;
+  name: string;
+  count: number;
+}) {
+  return (
+    <Link
+      href={href}
+      title={name}
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        "flex shrink-0 items-baseline gap-1.5 rounded-t-[10px] px-4 pt-3 pb-3.5 transition-colors duration-150",
+        current
+          ? "bg-background text-foreground"
+          : "text-on-court-muted hover:bg-white/8 hover:text-on-dark",
+      )}
+    >
+      <span
+        aria-hidden
+        className="font-display text-[19px] font-bold tracking-[0.05em] uppercase"
+      >
+        {code}
+      </span>
+      <span className="sr-only">{name}</span>
+      <span className="num text-[12px]">
+        <span className="sr-only">, </span>
+        {count.toLocaleString("en-AU")}
+        <span className="sr-only"> matches</span>
+      </span>
+    </Link>
+  );
+}
+
+/** The events of the open discipline as chips; past CHIP_LIMIT, a menu that works without JS. */
+function EventChips({
+  id,
+  detail,
+  view,
+}: {
+  id: number;
+  detail: TournamentDetail;
+  view: View;
+}) {
+  const events = detail.events.filter(
+    (e) => !view.discipline || e.discipline === view.discipline,
+  );
+  if (events.length <= 1 && !view.event) return null;
+  if (events.length > CHIP_LIMIT) {
+    return (
+      <form
+        action={`/tournaments/${id}`}
+        method="get"
+        className="mb-8 flex flex-wrap items-end gap-2"
+      >
+        {view.discipline && (
+          <input type="hidden" name="discipline" value={view.discipline} />
+        )}
+        <label className="min-w-0 flex-1 sm:max-w-md">
+          <span className="label-quiet mb-1.5 block">
+            Event ({events.length})
+          </span>
+          <Select
+            name="event"
+            defaultValue={view.event ?? ""}
+            className="w-full"
+          >
+            <option value="">All {events.length} events</option>
+            {events.map((e) => (
+              <option key={e.name} value={e.name}>
+                {e.name} ({e.matches})
+              </option>
+            ))}
+          </Select>
+        </label>
+        <button type="submit" className={BUTTON_QUIET}>
+          Show
+        </button>
+      </form>
+    );
+  }
+  return (
+    <nav aria-label="Events" className="mb-8">
+      <ul className="-mx-4 flex scroll-px-4 gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+        <li className="shrink-0">
+          <Chip
+            href={href(id, { discipline: view.discipline })}
+            current={!view.event}
+            label={
+              view.discipline
+                ? `All ${DISCIPLINES[view.discipline]?.toLowerCase()}`
+                : "All events"
+            }
+            count={events.reduce((n, e) => n + e.matches, 0)}
+          />
+        </li>
+        {events.map((e) => (
+          <li key={e.name} className="shrink-0">
+            <Chip
+              href={href(id, { discipline: view.discipline, event: e.name })}
+              current={view.event === e.name}
+              label={e.name}
+              count={e.matches}
+            />
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+function Chip({
   href,
   current,
   label,
@@ -297,19 +414,43 @@ function EventLink({
       href={href}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "relative flex h-9 shrink-0 items-center justify-between gap-3 rounded-lg px-3 text-[14px] whitespace-nowrap transition-colors lg:w-full",
+        "relative inline-flex h-11 items-center gap-2 rounded-full px-3.5 text-[13px] whitespace-nowrap ring-1 transition-colors duration-150",
         current
-          ? "bg-foreground text-background"
-          : "text-muted-foreground ring-1 ring-border hover:bg-muted hover:text-foreground lg:ring-0",
+          ? "bg-night font-medium text-on-dark ring-night"
+          : "bg-card text-foreground ring-border hover:ring-foreground/30",
       )}
     >
-      <span className="truncate">{label}</span>
-      <span className="num text-[12px] opacity-75">
+      {label}
+      <span
+        className={cn("num text-[12px]", current ? "text-lime" : "text-subtle")}
+      >
         <span className="sr-only">, </span>
         {count}
         <span className="sr-only"> matches</span>
       </span>
     </Link>
+  );
+}
+
+function ImportNote({ detail }: { detail: TournamentDetail }) {
+  const flag = importFlag(detail.import_state);
+  if (!flag) return null;
+  return (
+    <p
+      role="note"
+      className="mb-8 flex max-w-3xl items-start gap-2.5 rounded-lg bg-muted px-4 py-3 text-[14px] text-muted-foreground"
+    >
+      <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-foreground" />
+      <span>
+        <span className="font-medium text-foreground">{flag}.</span>{" "}
+        {detail.import_state?.note}
+        {detail.import_state?.status !== "complete_with_gaps" &&
+        detail.import_state?.unimported_matches
+          ? ` ${detail.import_state.unimported_matches} more could not be imported.`
+          : ""}{" "}
+        Counts on this page cover the matches we hold.
+      </span>
+    </p>
   );
 }
 
@@ -324,117 +465,19 @@ function groupBy<T>(items: T[], key: (item: T) => string): [string, T[]][] {
   return groups;
 }
 
-/** A scoreboard: two sides, one column per game, the won game bold, a lime dot for the winner. */
-function MatchCard({
-  match: m,
-  showEvent,
-}: {
-  match: TournamentMatch;
-  showEvent: boolean;
-}) {
-  const note = statusNote(m.status);
-  const side1 = m.games.map(([a]) => a);
-  const side2 = m.games.map(([, b]) => b);
+function MatchCentreSkeleton() {
   return (
-    <li className="rounded-[10px] bg-card px-4 py-3.5 ring-1 ring-border [contain-intrinsic-size:auto_104px] [content-visibility:auto] sm:px-5">
-      <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-subtle">
-        {showEvent ? (
-          <span>{formatDate(m.played_on)}</span>
-        ) : (
-          <>
-            <span className="font-medium text-muted-foreground">
-              {m.round ?? "Round not recorded"}
-            </span>
-            <span>{formatDate(m.played_on)}</span>
-          </>
-        )}
-        {note && (
-          <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
-            {note}
-          </span>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <SideLine
-          people={m.side1}
-          points={side1}
-          opponent={side2}
-          won={m.winner_side === 1}
-        />
-        <SideLine
-          people={m.side2}
-          points={side2}
-          opponent={side1}
-          won={m.winner_side === 2}
-        />
-      </div>
-      <p className="sr-only">
-        Score: {m.games.length ? formatScore(m.games) : "none recorded"}
-      </p>
-    </li>
-  );
-}
-
-function SideLine({
-  people,
-  points,
-  opponent,
-  won,
-}: {
-  people: TournamentMatch["side1"];
-  points: number[];
-  opponent: number[];
-  won: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span
-        aria-hidden
-        className={cn(
-          "size-2 shrink-0 rounded-full",
-          won ? "bg-primary ring-1 ring-accent-ink/40" : "bg-transparent",
-        )}
-      />
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate text-[15px]",
-          won ? "font-semibold text-foreground" : "text-muted-foreground",
-        )}
-      >
-        {people.length === 0
-          ? "Not recorded"
-          : people.map((p, i) => (
-              <span key={`${p.id}-${i}`}>
-                {i > 0 && <span className="text-subtle"> / </span>}
-                {p.withheld ? (
-                  <span className="text-subtle italic">{p.name}</span>
-                ) : (
-                  <Link
-                    href={`/players/${p.id}`}
-                    className="underline-offset-[3px] hover:text-foreground hover:underline"
-                  >
-                    {p.name}
-                  </Link>
-                )}
-              </span>
-            ))}
-        {won && <span className="sr-only"> (winner)</span>}
-      </span>
-      <span className="num flex shrink-0 gap-1" aria-hidden>
-        {points.map((pt, g) => (
-          <span
-            key={g}
-            className={cn(
-              "w-8 text-right text-[15px]",
-              pt > opponent[g]
-                ? "font-semibold text-foreground"
-                : "text-subtle",
-            )}
-          >
-            {pt}
-          </span>
-        ))}
-      </span>
-    </div>
+    <>
+      <Hero tone="court">
+        <div className="space-y-4 pb-16" aria-busy="true" aria-label="Loading">
+          <Skeleton className="h-3 w-40 bg-white/10" />
+          <Skeleton className="h-12 w-[36rem] max-w-full bg-white/10" />
+          <Skeleton className="h-4 w-80 max-w-full bg-white/10" />
+        </div>
+      </Hero>
+      <Container>
+        <RowsSkeleton rows={8} />
+      </Container>
+    </>
   );
 }

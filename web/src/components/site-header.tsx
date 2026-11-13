@@ -11,63 +11,46 @@ import { formatMoment, formatNextSync } from "@/lib/format";
 
 function Wordmark() {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <Mark className="size-8 shrink-0" />
+    <Link href="/" className="flex shrink-0 items-center gap-2.5">
+      <Mark className="size-8 shrink-0 rounded-lg ring-1 ring-white/15" />
       <span
         translate="no"
-        className="display text-[19px] leading-none font-semibold"
+        className="display text-[20px] leading-none tracking-[0.04em] text-on-dark uppercase"
       >
-        Badminton Scout
+        Badminton <span className="text-lime">Scout</span>
       </span>
     </Link>
   );
 }
 
-/** Desktop: a sidebar with identity, search, sections and live data freshness. */
-export function Sidebar({ showSearch }: { showSearch: boolean }) {
-  return (
-    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-background px-4 py-6 lg:flex">
-      <div className="px-2">
-        <Wordmark />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Every match, traced.
-        </p>
-      </div>
-      {showSearch && (
-        <div className="mt-6">
-          <SearchForm compact />
-        </div>
-      )}
-      <div className="mt-6">
-        <Suspense fallback={<NavList path={null} variant="sidebar" />}>
-          <NavLinks variant="sidebar" />
-        </Suspense>
-      </div>
-      <div className="mt-auto px-2">
-        <Suspense fallback={null}>
-          <Freshness />
-        </Suspense>
-      </div>
-      <SlashFocus />
-    </aside>
-  );
-}
-
-/** Below 1024 px: a slim top bar, and the sections as bottom tabs. */
-export function MobileBar({ showSearch }: { showSearch: boolean }) {
+/** The midnight top bar: identity, sections and search on desktop; tabs at the bottom below 1024 px. */
+export function TopBar({ showSearch }: { showSearch: boolean }) {
   return (
     <>
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
-        <Wordmark />
-        {showSearch && (
-          <Link
-            href="/"
-            aria-label="Search players"
-            className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Search aria-hidden className="size-5" />
-          </Link>
-        )}
+      <header className="on-dark sticky top-0 z-30 bg-night">
+        <div className="mx-auto flex h-14 w-full max-w-[1240px] items-center gap-8 px-4 sm:px-8 lg:h-16">
+          <Wordmark />
+          <div className="hidden h-full lg:block">
+            <Suspense fallback={<NavList path={null} variant="bar" />}>
+              <NavLinks variant="bar" />
+            </Suspense>
+          </div>
+          {showSearch && (
+            <>
+              <div className="ml-auto hidden w-72 lg:block">
+                <SearchForm compact />
+              </div>
+              <Link
+                href="/"
+                aria-label="Search players"
+                className="ml-auto flex size-11 items-center justify-center rounded-lg text-on-dark-muted hover:text-on-dark lg:hidden"
+              >
+                <Search aria-hidden className="size-5" />
+              </Link>
+            </>
+          )}
+        </div>
+        <SlashFocus />
       </header>
       <div className="fixed inset-x-0 bottom-0 z-20 lg:hidden">
         <Suspense fallback={<NavList path={null} variant="tabs" />}>
@@ -78,22 +61,13 @@ export function MobileBar({ showSearch }: { showSearch: boolean }) {
   );
 }
 
-async function Freshness() {
+/** Data freshness, in the footer of every page. */
+export async function Freshness() {
   const c = await api.coverage();
   return (
-    <dl className="space-y-2 border-t pt-4 text-xs">
-      <div>
-        <dt className="label-quiet">Last sync</dt>
-        <dd className="mt-0.5 text-foreground">
-          {formatMoment(c.last_sync_at) ?? "Not yet run"}
-        </dd>
-      </div>
-      <div>
-        <dt className="label-quiet">Next sync</dt>
-        <dd className="mt-0.5 text-muted-foreground">
-          {formatNextSync(c.next_sync_at)}
-        </dd>
-      </div>
-    </dl>
+    <p className="num">
+      Last sync {formatMoment(c.last_sync_at) ?? "not yet run"} · Next{" "}
+      {formatNextSync(c.next_sync_at)}
+    </p>
   );
 }

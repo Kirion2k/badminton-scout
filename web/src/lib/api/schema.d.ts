@@ -813,6 +813,7 @@ export interface operations {
     parameters: {
       query?: {
         event?: string | null;
+        discipline?: ("MS" | "WS" | "MD" | "WD" | "XD") | null;
         limit?: number;
         offset?: number;
       };

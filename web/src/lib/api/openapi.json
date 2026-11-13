@@ -1708,6 +1708,23 @@
           },
           {
             "in": "query",
+            "name": "discipline",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": ["MS", "WS", "MD", "WD", "XD"],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Discipline"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {

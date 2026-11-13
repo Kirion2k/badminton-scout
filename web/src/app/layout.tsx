@@ -1,24 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const newsreader = Newsreader({
-  variable: "--font-newsreader",
+// Barlow for reading, Barlow Condensed for competition headings, scores and labels
+const barlow = Barlow({
+  variable: "--font-barlow",
   subsets: ["latin", "latin-ext"],
-  weight: ["500", "600"],
+  weight: ["400", "500", "600"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const barlowCondensed = Barlow_Condensed({
+  variable: "--font-barlow-condensed",
+  subsets: ["latin", "latin-ext"],
+  weight: ["500", "600", "700"],
 });
 
-export const viewport: Viewport = { themeColor: "#f7f5f0" };
+export const viewport: Viewport = { themeColor: "#0b1526" };
 
 export const metadata: Metadata = {
   title: { default: "Badminton Scout", template: "%s · Badminton Scout" },
@@ -30,12 +27,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} h-full antialiased`}
+      className={`${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-foreground focus:px-3 focus:py-2 focus:text-background"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-lime focus:px-3 focus:py-2 focus:text-night"
         >
           Skip to content
         </a>

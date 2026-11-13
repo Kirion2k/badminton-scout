@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { RowsSkeleton, Section, Stat } from "@/components/bits";
-import { Shell } from "@/components/shell";
+import { FedCode, RowsSkeleton, Section, Stat } from "@/components/bits";
+import { Hero, Shell } from "@/components/shell";
 import { type Coverage, api } from "@/lib/api/client";
 import { formatDate, formatMoment, formatNextSync } from "@/lib/format";
 import { FEDERATION, PROVIDER_STATUS, SYNC_STATUS } from "@/lib/providers";
@@ -11,26 +11,31 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = { title: "Data coverage" };
 
 const TONE = {
-  good: "text-win ring-1 ring-win/40",
+  good: "bg-win text-white",
   partial: "bg-muted text-foreground",
   waiting: "bg-muted text-muted-foreground",
-  bad: "text-loss ring-1 ring-loss/40",
+  bad: "bg-loss text-white",
 };
 
 export default function CoveragePage() {
   return (
-    <Shell>
-      <header className="pb-10">
-        <p className="label-quiet">Coverage</p>
-        <h1 className="display mt-4 max-w-3xl text-[32px] leading-[1.08] font-semibold text-balance sm:text-[44px]">
-          Data coverage
-        </h1>
-        <p className="mt-4 max-w-2xl text-[16px] text-muted-foreground">
-          Where every record comes from, how fresh it is, and what is not yet
-          covered. A federation listed here means some of its tournaments are
-          imported, not all of them.
-        </p>
-      </header>
+    <Shell
+      hero={
+        <Hero>
+          <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
+            Coverage
+          </p>
+          <h1 className="display mt-3 text-[44px] leading-[0.95] uppercase sm:text-[64px]">
+            Data coverage
+          </h1>
+          <p className="mt-4 max-w-2xl pb-10 text-[16px] text-on-dark-muted">
+            Where every record comes from, how fresh it is, and what is not yet
+            covered. A federation listed here means some of its tournaments are
+            imported, not all of them.
+          </p>
+        </Hero>
+      }
+    >
       <Suspense fallback={<RowsSkeleton rows={6} />}>
         <Ledger />
       </Suspense>
@@ -42,7 +47,7 @@ async function Ledger() {
   const c = await api.coverage();
   return (
     <div className="space-y-16">
-      <dl className="grid grid-cols-2 gap-x-10 gap-y-8 border-y py-8 md:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-10 gap-y-8 rounded-[10px] bg-card p-6 ring-1 ring-border md:grid-cols-4">
         {[
           [c.public_tournaments, "public tournaments"],
           [c.public_matches, "public matches"],
@@ -148,12 +153,13 @@ function Federations({ coverage }: { coverage: Coverage }) {
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="display text-[20px] font-semibold">
+                  <FedCode code={fed?.code ?? "—"} />
+                  <h3 className="display text-[22px] uppercase">
                     {fed?.country ?? fed?.label ?? p.name}
                   </h3>
                   <span
                     className={cn(
-                      "rounded-full px-2.5 py-0.5 text-[12px] font-medium",
+                      "rounded px-2 py-0.5 font-display text-[12px] font-semibold tracking-[0.08em] uppercase",
                       TONE[status.tone],
                     )}
                   >

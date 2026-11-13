@@ -27,41 +27,64 @@ export const SYNC_STATUS: Record<string, string> = {
 // the global portal hosts tournaments from many countries, so it has no single country.
 export const FEDERATION: Record<
   string,
-  { label: string; country: string | null }
+  { label: string; country: string | null; code: string }
 > = {
-  tournamentsoftware_ba: { label: "Badminton Australia", country: "Australia" },
+  tournamentsoftware_ba: {
+    label: "Badminton Australia",
+    country: "Australia",
+    code: "AUS",
+  },
   tournamentsoftware_bnz: {
     label: "Badminton New Zealand",
     country: "New Zealand",
+    code: "NZL",
   },
   tournamentsoftware_scotland: {
     label: "Badminton Scotland",
     country: "Scotland",
+    code: "SCO",
   },
   tournamentsoftware_dbv: {
     label: "Deutscher Badminton-Verband",
     country: "Germany",
+    code: "GER",
   },
   tournamentsoftware_obv: {
     label: "Österreichischer Badmintonverband",
     country: "Austria",
+    code: "AUT",
   },
   tournamentsoftware_cbbd: {
     label: "Confederação Brasileira de Badminton",
     country: "Brazil",
+    code: "BRA",
   },
   tournamentsoftware_england: {
     label: "Badminton England",
     country: "England",
+    code: "ENG",
   },
-  tournamentsoftware_canada: { label: "Badminton Canada", country: "Canada" },
+  tournamentsoftware_canada: {
+    label: "Badminton Canada",
+    country: "Canada",
+    code: "CAN",
+  },
   tournamentsoftware_badvla: {
     label: "Badminton Vlaanderen",
     country: "Belgium (Flanders)",
+    code: "BEL",
   },
-  tournamentsoftware: { label: "Tournament Software (global)", country: null },
-  tournamentsoftware_bwf: { label: "BWF (Tournament Software)", country: null },
-  bwf: { label: "BWF", country: null },
+  tournamentsoftware: {
+    label: "Tournament Software (global)",
+    country: null,
+    code: "INT",
+  },
+  tournamentsoftware_bwf: {
+    label: "BWF (Tournament Software)",
+    country: null,
+    code: "BWF",
+  },
+  bwf: { label: "BWF", country: null, code: "BWF" },
 };
 
 // Short labels for rows and filters, keyed by source id.

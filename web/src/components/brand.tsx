@@ -1,14 +1,25 @@
-/** The Badminton Scout mark: a cork and three fanned feathers in a lime disc (docs/design.md). */
+/** The Badminton Scout crest: a half court in a midnight badge, and a lime shuttle in flight
+ * across it (cork, feather skirt, two ribs). The court is the data; the shuttle is the play. */
 export function Mark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden className={className}>
-      <circle cx="16" cy="16" r="16" fill="#c6f432" />
-      <g stroke="#121a26" strokeWidth="2.2" strokeLinecap="round" fill="none">
-        <path d="M13.5 18.5 L22.5 7.5" />
-        <path d="M14.5 19.8 L25 13" />
-        <path d="M12.2 17.4 L16.5 6.2" />
+      <rect width="32" height="32" rx="8" fill="#0b1526" />
+      <g fill="none" stroke="#3a5378" strokeWidth="1.1">
+        <rect x="5.5" y="4.5" width="21" height="23" />
+        <path d="M5.5 11h21M16 11v16.5" />
       </g>
-      <circle cx="11" cy="21" r="4.2" fill="#121a26" />
+      <path d="M11.9 18.2 16.8 9.8 23.2 16.2 14.8 21.1Z" fill="#c8f031" />
+      <g stroke="#0b1526" strokeWidth="0.9" strokeLinecap="round">
+        <path d="M13.3 19.7 18.4 11.4M13.3 19.7 21.5 14.6" />
+      </g>
+      <circle
+        cx="11.5"
+        cy="21.5"
+        r="3.3"
+        fill="#c8f031"
+        stroke="#0b1526"
+        strokeWidth="0.9"
+      />
     </svg>
   );
 }

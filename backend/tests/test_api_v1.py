@@ -196,6 +196,9 @@ async def test_tournament_matches_show_both_sides_and_hide_juniors(
     path = f"/v1/tournaments/{t.id}/matches"
     filtered = (await api.get(path, params={"event": "XD Open"})).json()
     assert filtered["total"] == 1
+    by_discipline = (await api.get(path, params={"discipline": "MS"})).json()
+    assert {m["discipline"] for m in by_discipline["items"]} == {"MS"}
+    assert (await api.get(path, params={"discipline": "XX"})).status_code == 422
 
 
 async def test_junior_only_tournament_is_404_everywhere(

@@ -750,6 +750,7 @@ def tournament_matches(
     db: DB,
     tournament_id: int,
     event: str | None = Query(None, max_length=200),
+    discipline: Literal["MS", "WS", "MD", "WD", "XD"] | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> TournamentMatchPage:
@@ -760,6 +761,8 @@ def tournament_matches(
     ]
     if event:
         filters.append(Event.name == event)
+    if discipline:
+        filters.append(Event.discipline == discipline)
     base = select(Match.id).join(Event, Event.id == Match.event_id).where(*filters)
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
     if total == 0 and not db.scalar(

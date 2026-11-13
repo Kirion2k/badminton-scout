@@ -8,16 +8,15 @@ import {
   EmptyState,
   FormStrip,
   LINK,
-  PageHeader,
+  Monogram,
   Pager,
-  Provenance,
   ResultBadge,
   RowsSkeleton,
   Score,
   Section,
   Select,
 } from "@/components/bits";
-import { Shell } from "@/components/shell";
+import { Container, Hero, Shell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   type Schemas,
@@ -28,6 +27,7 @@ import {
 import {
   DISCIPLINES,
   formatDate,
+  formatRetrieved,
   one,
   positiveInt,
   statusNote,
@@ -44,11 +44,13 @@ export default function PlayerPage({
   searchParams,
 }: PageProps<"/players/[id]">) {
   return (
-    <Shell>
-      <Suspense fallback={<ProfileSkeleton />}>
-        <Profile params={params} searchParams={searchParams} />
-      </Suspense>
-    </Shell>
+    <Shell
+      hero={
+        <Suspense fallback={<ProfileSkeleton />}>
+          <Profile params={params} searchParams={searchParams} />
+        </Suspense>
+      }
+    />
   );
 }
 
@@ -85,7 +87,7 @@ async function Profile({ params, searchParams }: PageProps<"/players/[id]">) {
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,
     }),
-    api.playerMatches(id, { limit: 30 }),
+    api.playerMatches(id, { limit: 100 }),
   ]);
   const form = recent.items
     .filter((m) => m.status !== "not_played" && m.result !== null)
@@ -97,53 +99,56 @@ async function Profile({ params, searchParams }: PageProps<"/players/[id]">) {
   return (
     <>
       <Header profile={profile} form={form} />
-      <div className="grid gap-14 xl:grid-cols-[minmax(0,1fr)_20rem] xl:gap-14">
-        <Section
-          title="Match history"
-          action={
-            <span className="num text-muted-foreground">
-              {matches.total} {matches.total === 1 ? "match" : "matches"}
-            </span>
-          }
-        >
-          <Filters id={id} profile={profile} filters={filters} />
-          {matches.items.length === 0 ? (
-            page > 1 && matches.total > 0 ? (
-              <EmptyState title="No more matches">
-                <Link className={LINK} href={`/players/${id}`}>
-                  Back to the first page
-                </Link>
-              </EmptyState>
-            ) : (
-              <EmptyState
-                title={
-                  filtered ? "No matches with these filters" : "No matches"
-                }
-              >
-                {filtered && (
+      <Container>
+        <div className="grid gap-14 xl:grid-cols-[minmax(0,1fr)_20rem] xl:gap-14">
+          <Section
+            title="Match history"
+            action={
+              <span className="num text-muted-foreground">
+                {matches.total} {matches.total === 1 ? "match" : "matches"}
+              </span>
+            }
+          >
+            <Filters id={id} profile={profile} filters={filters} />
+            {matches.items.length === 0 ? (
+              page > 1 && matches.total > 0 ? (
+                <EmptyState title="No more matches">
                   <Link className={LINK} href={`/players/${id}`}>
-                    Clear filters
+                    Back to the first page
                   </Link>
-                )}
-              </EmptyState>
-            )
-          ) : (
-            <MatchHistory matches={matches.items} />
-          )}
-          <Pager
-            path={`/players/${id}`}
-            params={filters}
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={matches.total}
-          />
-        </Section>
-        <aside className="min-w-0 space-y-12" aria-label="Player summary">
-          <ByDiscipline profile={profile} />
-          <Tournaments id={id} profile={profile} />
-          <Opponents profile={profile} />
-        </aside>
-      </div>
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  title={
+                    filtered ? "No matches with these filters" : "No matches"
+                  }
+                >
+                  {filtered && (
+                    <Link className={LINK} href={`/players/${id}`}>
+                      Clear filters
+                    </Link>
+                  )}
+                </EmptyState>
+              )
+            ) : (
+              <MatchHistory matches={matches.items} />
+            )}
+            <Pager
+              path={`/players/${id}`}
+              params={filters}
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={matches.total}
+            />
+          </Section>
+          <aside className="min-w-0 space-y-12" aria-label="Player summary">
+            <ByDiscipline profile={profile} />
+            <Partners matches={recent.items} />
+            <Tournaments id={id} profile={profile} />
+            <Opponents profile={profile} />
+          </aside>
+        </div>
+      </Container>
     </>
   );
 }
@@ -156,60 +161,144 @@ function Header({
   form: ("won" | "lost")[];
 }) {
   const { record } = profile;
+  const rate = record.played
+    ? Math.round((record.won / record.played) * 100)
+    : null;
   return (
-    <PageHeader eyebrow="Player" title={profile.name}>
-      <dl className="grid grid-cols-2 gap-x-10 gap-y-6 border-y py-6 sm:grid-cols-4">
-        <div title="Decided matches only. Walkovers are included and counted separately.">
-          <dt className="label-quiet">Record</dt>
-          <dd className="display num mt-2 text-[34px] leading-none font-semibold">
-            <span className="text-win">{record.won}</span>
-            <span className="text-subtle">–</span>
-            <span className="text-loss">{record.lost}</span>
+    <Hero>
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
+        <Monogram
+          name={profile.name}
+          className="size-20 text-[34px] ring-1 ring-white/15 sm:size-28 sm:text-[46px]"
+        />
+        <div className="min-w-0">
+          <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
+            Player
+            {profile.disciplines.length > 0 &&
+              ` · ${profile.disciplines.map((d) => DISCIPLINES[d] ?? d).join(" · ")}`}
+          </p>
+          <h1 className="display mt-2 text-[40px] leading-[0.95] text-balance uppercase sm:text-[60px]">
+            {profile.name}
+          </h1>
+          <p className="num mt-2 text-[14px] text-on-dark-muted">
+            Active {formatDate(profile.first_played)} –{" "}
+            {formatDate(profile.last_played)}
+          </p>
+        </div>
+      </div>
+      <dl className="mt-8 grid grid-cols-2 gap-x-8 gap-y-6 border-t border-white/12 py-6 sm:grid-cols-4">
+        <div
+          className="flex flex-col-reverse"
+          title="Decided matches only. Walkovers are included and counted separately."
+        >
+          <dt className="mt-1 font-display text-[12px] font-semibold tracking-[0.12em] text-on-dark-muted uppercase">
+            Record
+          </dt>
+          <dd className="reveal display num text-[44px] leading-none">
+            {record.won}–{record.lost}
           </dd>
         </div>
-        <div>
-          <dt className="label-quiet">Matches decided</dt>
-          <dd className="display num mt-2 text-[34px] leading-none font-semibold">
-            {record.played}
-          </dd>
-          {record.walkovers > 0 && (
-            <dd className="mt-1 text-[12px] text-subtle">
-              incl. {record.walkovers} walkovers
-            </dd>
-          )}
-        </div>
-        <div>
-          <dt className="label-quiet">Tournaments</dt>
-          <dd className="display num mt-2 text-[34px] leading-none font-semibold">
-            {profile.tournaments}
-          </dd>
-        </div>
-        <div>
-          <dt className="label-quiet">Active</dt>
-          <dd className="num mt-2 text-[15px] leading-snug">
-            {formatDate(profile.first_played)}
-            <br />
-            <span className="text-muted-foreground">
-              to {formatDate(profile.last_played)}
-            </span>
-          </dd>
-        </div>
+        <HeroStat term="Matches decided" value={record.played}>
+          {record.walkovers > 0 && `incl. ${record.walkovers} walkovers`}
+        </HeroStat>
+        <HeroStat term="Win rate" value={rate === null ? "–" : `${rate}%`} />
+        <HeroStat term="Tournaments" value={profile.tournaments} />
       </dl>
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-8">
         {form.length > 0 ? (
-          <div className="flex items-center gap-3">
-            <span className="label-quiet">Last {form.length} decided</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="font-display text-[12px] font-semibold tracking-[0.12em] whitespace-nowrap text-on-dark-muted uppercase">
+              Form · last {form.length}
+            </span>
             <FormStrip results={form} />
           </div>
         ) : (
           <span />
         )}
-        <Provenance
-          sources={profile.sources}
-          retrievedAt={profile.data_retrieved_at}
-        />
+        <p className="text-[12px] text-on-dark-muted">
+          Source {profile.sources.join(", ") || "not recorded"} ·{" "}
+          {formatRetrieved(profile.data_retrieved_at)} ·{" "}
+          <Link
+            href="/coverage"
+            className="underline decoration-white/30 underline-offset-[3px] hover:text-on-dark"
+          >
+            About this data
+          </Link>
+        </p>
       </div>
-    </PageHeader>
+    </Hero>
+  );
+}
+
+function HeroStat({
+  term,
+  value,
+  children,
+}: {
+  term: string;
+  value: number | string;
+  children?: React.ReactNode;
+}) {
+  return (
+    // one dt/dd group; the figure is drawn first, the term and any note under it
+    <div className="flex flex-col">
+      <dt className="order-2 mt-1 font-display text-[12px] font-semibold tracking-[0.12em] text-on-dark-muted uppercase">
+        {term}
+      </dt>
+      <dd className="reveal display num order-1 text-[44px] leading-none">
+        {value}
+      </dd>
+      {children && (
+        <dd className="order-3 mt-0.5 text-[12px] text-on-dark-muted">
+          {children}
+        </dd>
+      )}
+    </div>
+  );
+}
+
+/** Doubles partners in the latest 100 matches, from this player's side: decided matches only. */
+function Partners({ matches }: { matches: PlayerMatch[] }) {
+  const byPartner = new Map<
+    number,
+    { name: string; won: number; lost: number }
+  >();
+  for (const m of matches) {
+    if (m.status === "not_played" || !m.result) continue;
+    for (const p of m.partners) {
+      if (p.withheld) continue;
+      const row = byPartner.get(p.id) ?? { name: p.name, won: 0, lost: 0 };
+      row[m.result === "won" ? "won" : "lost"] += 1;
+      byPartner.set(p.id, row);
+    }
+  }
+  const rows = [...byPartner.entries()]
+    .sort((a, b) => b[1].won + b[1].lost - (a[1].won + a[1].lost))
+    .slice(0, 6);
+  if (rows.length === 0) return null;
+  return (
+    <Section title="Doubles partners">
+      <ul className="divide-y text-[14px]">
+        {rows.map(([pid, r]) => (
+          <li
+            key={pid}
+            className="flex items-center justify-between gap-3 py-3"
+          >
+            <Link href={`/players/${pid}`} className="truncate hover:underline">
+              {r.name}
+            </Link>
+            <span className="num shrink-0 text-[13px]">
+              <span className="text-win">{r.won}</span>
+              <span className="text-subtle">–</span>
+              <span className="text-loss">{r.lost}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="pt-3 text-[12px] text-subtle">
+        Together, in this player’s latest {matches.length} matches.
+      </p>
+    </Section>
   );
 }
 
@@ -371,7 +460,7 @@ function MatchHistory({ matches }: { matches: PlayerMatch[] }) {
         return (
           <li
             key={m.id}
-            className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 py-4 sm:grid-cols-[6.5rem_1fr_auto_auto] sm:items-center"
+            className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 py-3.5 transition-colors duration-150 hover:bg-card sm:grid-cols-[6.5rem_1fr_auto_auto] sm:items-center sm:px-2"
           >
             <span className="num text-[13px] text-muted-foreground">
               {formatDate(m.played_on)}
@@ -504,15 +593,23 @@ function Opponents({ profile }: { profile: PlayerProfile }) {
 
 function ProfileSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading player">
-      <Skeleton className="h-3 w-20 bg-muted" />
-      <Skeleton className="h-14 w-80 bg-muted" />
-      <div className="grid grid-cols-2 gap-8 border-y py-6 sm:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-12 w-24 bg-muted" />
-        ))}
-      </div>
-      <RowsSkeleton rows={8} />
-    </div>
+    <>
+      <Hero>
+        <div
+          className="flex items-end gap-6 pb-16"
+          aria-busy="true"
+          aria-label="Loading player"
+        >
+          <Skeleton className="size-28 rounded-xl bg-white/10" />
+          <div className="space-y-3">
+            <Skeleton className="h-3 w-24 bg-white/10" />
+            <Skeleton className="h-14 w-80 max-w-full bg-white/10" />
+          </div>
+        </div>
+      </Hero>
+      <Container>
+        <RowsSkeleton rows={8} />
+      </Container>
+    </>
   );
 }

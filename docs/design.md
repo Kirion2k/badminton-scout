@@ -1,85 +1,73 @@
-# Badminton Scout design system (M4, light editorial)
+# Badminton Scout design system (M5, premium badminton match centre)
 
-**Direction chosen:** *Editorial sports intelligence*: light, typography-led, quiet. This is the
-second of two directions explored with the UI/UX Pro Max skill (`--design-system`).
+Supersedes the M4 light editorial system. Direction: 70% refined sports intelligence, 20% athletic
+energy, 10% editorial restraint. Not esports, not betting, not a newspaper.
 
-- **A, "Vibrant & Block-based":** Bebas Neue, red. Rejected: loud fan-site energy, wrong for a
-  data product.
-- **B, "Minimalism & Swiss Style":** Fira Code, corporate blue. Its structure was kept, its
-  palette and type were not.
-
-The chosen result takes B's grid discipline, adds the skill's "News Editorial" pairing (a
-Newsreader serif for display), and uses the owner's palette. The Benji Taylor evaluation of the
-previous dark UI found the main gap was identity and delight; the structural changes below answer
-that. Brandkit's "Light Editorial" mode set the brand strategy.
+## How it was chosen
+- **UI/UX Pro Max** `--design-system "sports analytics match results live scores"` and the
+  typography search picked the *Sports/Fitness* pairing: **Barlow Condensed** (headings, scores,
+  labels) + **Barlow** (reading). Its team-red palette and the esports pairing (Russo One /
+  Chakra Petch) were rejected: off-brief.
+- **Benji Taylor evaluation** of M4: strongest dimension trust (provenance); most critical gap
+  delight and identity, so the scoreboard and the tournament hero became the signature moments.
+- **Brandkit** strategy: the court is the grid (data), the shuttle is the play (result).
+- Two concepts were built and screenshotted: **A, Broadcast Match Centre** (all dark, timing-tower
+  rows) and **B, Premium Athletic Intelligence** (light body, court-green hero, scoreboard cards).
+  B was chosen: A's all-dark page and italic caps read as esports, and at desktop width the
+  scores sat ~1000 px from the names. From A, B kept the lime winner lane and underline tabs.
 
 ## Brand
-- **Promise:** every match, traced to its source.
-- **Mark:** a lime disc holding a cork circle and three fanned feather strokes (the shuttle's
-  flight). It is used for the favicon, the sidebar and the badge.
-- **Wordmark:** "Badminton Scout" in Newsreader semibold.
-- **Tagline:** *Every match, traced.*
+- **Mark:** a midnight crest holding a half court in thin lines and a lime shuttle in flight
+  (cork, feather skirt, two ribs). Survives at 16 px (`web/src/app/icon.svg`,
+  `components/brand.tsx`).
+- **Wordmark:** BADMINTON **SCOUT**, Barlow Condensed 700, uppercase, Scout in lime.
+- **Graphic language:** `.court-lines`, a half court drawn to scale (tramlines, service lines,
+  centre line) at 13% white on dark heroes. Never on light surfaces, never animated.
+- **Identity without photos:** players get a monogram crest (initials, lime base bar); federations
+  get a country-code badge (AUS, NZL, SCO, GER, AUT, BRA, ENG, BEL, CAN, INT).
 
 ## Tokens (`web/src/app/globals.css`)
-| Token | Value | Use |
-|---|---|---|
-| `--background` | `#f7f5f0` warm ivory | page |
-| `--card` | `#ffffff` | the few raised surfaces (search, scoreboards) |
-| `--muted` | `#efece4` | hover fills, quiet chips |
-| `--foreground` | `#121a26` ink | text, 16:1 |
-| `--muted-foreground` | `#5b6472` | secondary text, 5.1:1 or better |
-| `--subtle` | `#626a77` | tertiary meta, 4.6:1 on every surface |
-| `--border` | `#e3dfd5` | hairlines |
-| `--primary` | `#c6f432` shuttle lime | fills and markers only, never text on ivory |
-| `--primary-foreground` | `#121a26` | text on lime |
-| `--accent-ink` | `#3f5a00` | lime-family text: links on hover, winner marks (7:1) |
-| `--win` / `--loss` | `#1f7a3a` / `#b42318` | won / lost text (4.6:1 and 5.6:1 or better) |
+- Light: background `#f6f5f1`, card `#fff`, muted `#eceae3`, ink `#0b1526`, muted text
+  `#545e6e`, subtle `#5c6576`, border `#e2dfd6`; win `#157a3c`, loss `#b42318`.
+- Dark surfaces: midnight `#0b1526` (top bar, Discover, Tournaments, player, Coverage heroes),
+  court green `#0d3b2c` (tournament match centre), muted text on them `#aab5c6` / `#a9c4b8`.
+- Lime `#c8f031`: winner lane, active nav underline, primary action on dark, brand. Never text on
+  light. All text pairs measured ≥ 4.5:1.
+- Type: headings and figures Barlow Condensed 700 with tabular numerals; metadata labels
+  condensed uppercase with 0.12em tracking; body Barlow 15 px.
 
-- **Type:** Newsreader for display (page titles, section heads, big numbers); Geist Sans for the
-  interface; tabular figures for every number.
-- **Scale:** display 44/36/28 px, headings 20/17 px, body 15 px, meta 13 px, labels 11 px
-  uppercase.
-- **Radius:** 10 px on surfaces, 8 px on controls, full on chips.
-- **Rules:** dividers are 1 px `--border`, not boxes. Sections are separated by space and a
-  serif heading. Shadows only on the search field and on scoreboards (one soft shadow).
-
-## Structure (what changed, not just how it looks)
-- **Shell.** A **left sidebar** at ≥ 1024 px holds the mark and wordmark, the global player search,
-  the sections (Discover, Tournaments, Coverage) and a live **data freshness** footer (last sync,
-  next sync). Below 1024 px there is a top bar with the wordmark and search, and a bottom tab bar
-  with the same three sections.
-- **Discover.** An editorial hero: a serif headline with the live tournament, match and player
-  counts, and one large search. Below it, *Federations* is a typographic index of real public
-  coverage per federation (country, tournaments, matches), each row linking to its filtered list;
-  then *Latest results*, recent tournaments with a date column.
-- **Tournaments.** A **filter rail** (name, federation with live counts, year, discipline) beside a
-  **results workspace** sorted by the chosen order. Rows are grouped under month headings, with a
-  date block, the title, the federation and country, place, completeness and counts.
-- **Tournament detail.** A header (federation kicker, serif title, a dates / place / organiser /
-  size line, provenance, completeness note). Below it, a **sticky event navigator** groups events
-  by discipline, and the **match workspace** shows matches grouped by round when one event is
-  selected, or by event when all are. Matches are scoreboards.
-- **Player profile.** An identity header (serif name, record W–L, matches, active span,
-  last-10 form). Then **results by discipline** (computed from decided matches only), the match
-  history with compact filters, and a side rail with tournaments and frequent opponents.
-- **Coverage.** A hero sentence of real totals; a **federation ledger** with status, public
-  tournaments and matches, span and last sync; pending providers (BWF) with the exact dependency;
-  then the limitations. National coverage is never implied: each row says "N tournaments".
+## Structure
+- **Shell:** midnight top bar (crest, sections with a lime underline that grows in, search with
+  `/`); footer with data freshness. Below 1024 px: bottom tabs with a navy pill on the current tab.
+- **Scoreboard** (`components/scoreboard.tsx`): header strip (event · round, status or date), one
+  row per side, a lime lane bar on the winner, one fixed column per game actually played, the
+  won game bold. Statuses: Completed, Score unavailable, Walkover, Retired, Disqualified, Not
+  played. No LIVE state exists because no provider gives verified live data.
+- **Tournament match centre:** court-green hero (federation, title, dates, place, organiser,
+  events / matches / days, import state, source), discipline tabs MS · WS · MD · WD · XD on its
+  edge (`?discipline=`, served by the API's discipline filter), event chips (a menu past 24
+  events), then scoreboards grouped by event, or by round within one event.
+- **Player:** athlete hero (monogram, disciplines, name, active span, Record / Matches decided /
+  Win rate / Tournaments, last-10 form), then match history with filters, and a rail with results
+  by discipline, doubles partners (latest 100 matches), tournaments and head-to-head.
+- **Discover:** hero with search first and real totals as a strip; real scoreboards from the
+  newest fully imported tournament (late rounds first); latest competitions; federation board.
+- **Tournaments:** hero, filter rail with federation codes, month-grouped competition rows.
+- **Coverage:** hero, totals card, freshness, federation ledger with codes and status chips.
 
 ## Rules carried over
 - No fabricated numbers: no rankings, Elo or age, and nothing without a source.
 - Colour never carries meaning alone: W and L letters, words for statuses, "Score unavailable"
   written out.
 - Every page answers "where is this from?" within a glance (provenance line).
-- Accessibility: axe passes in e2e, there is a skip link, focus is visible (an ink outline on
-  ivory), touch targets are ≥ 44 px on mobile, and reduced motion is respected (motion is limited
-  to 150 ms colour transitions).
+- Accessibility: axe passes in e2e, there is a skip link, focus is visible (navy on light, lime on
+  dark surfaces), touch targets are ≥ 44 px on mobile, and reduced motion is respected (motion: 150–260 ms selected-state
+  transitions and a score reveal, all off under `prefers-reduced-motion`).
 
 ## Responsive
-- **≥ 1280 px:** sidebar, two-column workspaces.
-- **1024–1279 px:** sidebar, single-column workspaces with the rail below.
-- **< 1024 px:** top bar plus bottom tabs; filters collapse into a disclosure; scoreboards stay
-  two-line.
+- **≥ 1024 px:** midnight top bar with sections and search; scoreboards two per row.
+- **< 1024 px:** top bar plus bottom tabs; discipline tabs and event chips scroll horizontally;
+  scoreboards one per row, full width, scores never below 21 px.
 - No horizontal page scroll at any width (tested at 390 px).
 
 ## Status codes under streaming (Next.js 16 Cache Components)

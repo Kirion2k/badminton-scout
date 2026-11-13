@@ -7,13 +7,13 @@ import {
   BUTTON_QUIET,
   DateBlock,
   EmptyState,
+  FedCode,
   LINK,
-  PageHeader,
   Pager,
   RowsSkeleton,
   Select,
 } from "@/components/bits";
-import { Shell } from "@/components/shell";
+import { Hero, Shell } from "@/components/shell";
 import { Input } from "@/components/ui/input";
 import { type Coverage, type TournamentSummary, api } from "@/lib/api/client";
 import {
@@ -39,13 +39,22 @@ export default function TournamentsPage({
   searchParams,
 }: PageProps<"/tournaments">) {
   return (
-    <Shell>
-      <PageHeader eyebrow="Explore" title="Tournaments">
-        <p className="max-w-2xl text-[16px] text-muted-foreground">
-          Every tournament with published results, from every connected
-          federation.
-        </p>
-      </PageHeader>
+    <Shell
+      hero={
+        <Hero>
+          <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
+            Competitions
+          </p>
+          <h1 className="display mt-3 text-[44px] leading-[0.95] uppercase sm:text-[64px]">
+            Tournaments
+          </h1>
+          <p className="mt-4 max-w-2xl pb-10 text-[16px] text-on-dark-muted">
+            Every tournament with published results, from every connected
+            federation. Open one for its match centre.
+          </p>
+        </Hero>
+      }
+    >
       <Suspense fallback={<RowsSkeleton rows={10} />}>
         <TournamentList searchParams={searchParams} />
       </Suspense>
@@ -89,10 +98,10 @@ async function TournamentList({
     <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12">
       <FilterRail filters={filters} coverage={coverage} />
       <section aria-labelledby="results-heading" className="min-w-0">
-        <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-foreground/80 pb-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-3 border-b-2 border-foreground pb-2">
           <h2
             id="results-heading"
-            className="display text-[22px] font-semibold"
+            className="display text-[22px] uppercase"
             aria-live="polite"
           >
             <span className="num">{data.total.toLocaleString("en-AU")}</span>{" "}
@@ -199,12 +208,12 @@ function TournamentRow({ tournament: t }: { tournament: TournamentSummary }) {
   const fed = FEDERATION[t.source_id];
   const flag = importFlag(t.import_state);
   return (
-    <li className="group relative grid grid-cols-[3.75rem_minmax(0,1fr)] gap-x-4 gap-y-1 py-4 sm:grid-cols-[4.5rem_minmax(0,1fr)_7rem]">
+    <li className="group relative grid grid-cols-[3.75rem_minmax(0,1fr)] gap-x-4 gap-y-1 py-4 transition-colors duration-150 hover:bg-card sm:grid-cols-[4.5rem_minmax(0,1fr)_7rem] sm:px-2">
       <DateBlock iso={t.start_date} />
       <div className="min-w-0">
         <Link
           href={`/tournaments/${t.id}`}
-          className="text-[16px] leading-snug font-medium text-pretty after:absolute after:inset-0 group-hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-ring"
+          className="text-[16px] leading-snug font-semibold text-pretty after:absolute after:inset-0 group-hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-ring"
         >
           {t.name ?? "Unnamed tournament"}
         </Link>
@@ -221,7 +230,8 @@ function TournamentRow({ tournament: t }: { tournament: TournamentSummary }) {
             </>
           )}
         </p>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-subtle">
+        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-subtle">
+          {fed && <FedCode code={fed.code} />}
           <span>{fed?.label ?? t.source_id}</span>
           {flag && (
             <span
@@ -237,7 +247,7 @@ function TournamentRow({ tournament: t }: { tournament: TournamentSummary }) {
         </p>
       </div>
       <p className="num hidden text-right sm:block">
-        <span className="display text-[22px] font-semibold">
+        <span className="display text-[28px] leading-none">
           {t.matches.toLocaleString("en-AU")}
         </span>
         <span className="block text-[12px] text-subtle">
@@ -396,6 +406,7 @@ function FilterRail({
                     current={filters.source === p.source_id}
                     label={fed?.country ?? fed?.label ?? p.name}
                     count={p.public_tournaments}
+                    code={fed?.code}
                   />
                 </li>
               );
@@ -412,11 +423,13 @@ function FederationLink({
   current,
   label,
   count,
+  code,
 }: {
   href: string;
   current: boolean;
   label: string;
   count: number;
+  code?: string;
 }) {
   return (
     <Link
@@ -425,11 +438,14 @@ function FederationLink({
       className={cn(
         "flex h-9 items-center justify-between gap-3 rounded-lg px-3 transition-colors",
         current
-          ? "bg-foreground text-background"
+          ? "bg-night font-medium text-on-dark"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
-      <span className="truncate">{label}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        {code && <FedCode code={code} dark={current} />}
+        <span className="truncate">{label}</span>
+      </span>
       <span className="num text-[12px] opacity-80">
         {count.toLocaleString("en-AU")}
       </span>
