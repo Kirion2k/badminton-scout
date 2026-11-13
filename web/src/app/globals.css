@@ -134,7 +134,7 @@
 
 @layer components {
   .control {
-    @apply h-9 rounded-md border border-input bg-card px-3 text-sm text-foreground transition-colors placeholder:text-subtle hover:border-foreground/40;
+    @apply h-11 rounded-md border border-input bg-card px-3 lg:h-9 text-sm text-foreground transition-colors placeholder:text-subtle hover:border-foreground/40;
   }
   /* names and headings: Archivo at its condensed width */
   .display {

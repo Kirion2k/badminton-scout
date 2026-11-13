@@ -1,0 +1,379 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-13T12:16:23.692627+00:00",
+  "title": "Design System: Mynton",
+  "extensions": {
+    "colorMeta": {
+      "form-green": {
+        "role": "primary",
+        "displayName": "Form Green",
+        "canonical": "#0b5d44",
+        "tonalRamp": [
+          "#15382d",
+          "#1d634d",
+          "#209370",
+          "#1ec894",
+          "#52e0b5",
+          "#9ce2cd",
+          "#cfece4",
+          "#eef7f4"
+        ]
+      },
+      "ballpoint-blue": {
+        "role": "secondary",
+        "displayName": "Ballpoint Blue",
+        "canonical": "#1f3fbf",
+        "tonalRamp": [
+          "#161d36",
+          "#202c60",
+          "#253a8e",
+          "#2544c0",
+          "#5872da",
+          "#9facdf",
+          "#d1d6eb",
+          "#eef0f6"
+        ]
+      },
+      "loss-red": {
+        "role": "tertiary",
+        "displayName": "Loss Red",
+        "canonical": "#a3271c",
+        "tonalRamp": [
+          "#361917",
+          "#5f2520",
+          "#8d2e26",
+          "#bf3327",
+          "#d8645a",
+          "#dfa5a0",
+          "#ebd3d1",
+          "#f6efee"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#14171a",
+        "tonalRamp": [
+          "#232629",
+          "#3a4046",
+          "#505963",
+          "#657381",
+          "#8d99a5",
+          "#b9bfc5",
+          "#dbdee0",
+          "#f1f2f3"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#404040",
+          "#595959",
+          "#737373",
+          "#999999",
+          "#bfbfbf",
+          "#dedede",
+          "#f2f2f2"
+        ]
+      },
+      "pencil-grey": {
+        "role": "neutral",
+        "displayName": "Pencil Grey",
+        "canonical": "#5d636b",
+        "tonalRamp": [
+          "#252628",
+          "#3d3f43",
+          "#54595e",
+          "#6b727a",
+          "#93989f",
+          "#bcbfc2",
+          "#dddedf",
+          "#f2f2f3"
+        ]
+      },
+      "wash": {
+        "role": "neutral",
+        "displayName": "Wash",
+        "canonical": "#f2f4f1",
+        "tonalRamp": [
+          "#252924",
+          "#3e453a",
+          "#566250",
+          "#6e8066",
+          "#95a48e",
+          "#bdc5ba",
+          "#dde0dc",
+          "#f2f3f2"
+        ]
+      },
+      "sheet-rule": {
+        "role": "neutral",
+        "displayName": "Sheet Rule",
+        "canonical": "#b9c7bf",
+        "tonalRamp": [
+          "#242926",
+          "#3b453f",
+          "#516158",
+          "#677f71",
+          "#8fa398",
+          "#bac4bf",
+          "#dce0de",
+          "#f2f3f2"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#dcdfd9",
+        "tonalRamp": [
+          "#262824",
+          "#40443c",
+          "#596053",
+          "#737c6a",
+          "#99a191",
+          "#bfc3bb",
+          "#dedfdc",
+          "#f2f3f2"
+        ]
+      },
+      "control-edge": {
+        "role": "neutral",
+        "displayName": "Control Edge",
+        "canonical": "#c3c8c0",
+        "tonalRamp": [
+          "#262825",
+          "#3f433d",
+          "#585e54",
+          "#717a6b",
+          "#979f93",
+          "#bec2bc",
+          "#dedfdd",
+          "#f2f3f2"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selection",
+        "canonical": "#d6def8",
+        "tonalRamp": [
+          "#171e36",
+          "#202f5f",
+          "#253e8d",
+          "#264abf",
+          "#5977d9",
+          "#a0afdf",
+          "#d1d7eb",
+          "#eef0f6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Player name on a profile, condensed 78%, 36px on a phone."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles, condensed 78%, 30–32px on a phone; also the record figure (28px)."
+      },
+      "title": {
+        "displayName": "Section title",
+        "purpose": "Green condensed section heading over a green rule."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Rows, meta lines and prose; tabular figures."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Context lines, source notes, counts; pencil grey, normal width."
+      },
+      "mark": {
+        "displayName": "Mark",
+        "purpose": "Letters in W/L squares and result badges."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "state-colour",
+        "value": "150ms ease (Tailwind transition-colors)",
+        "purpose": "Hover and current-state colour changes."
+      },
+      {
+        "name": "row-chevron",
+        "value": "transform 150ms",
+        "purpose": "Score chevron rotates 90° when a scoresheet opens."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0ms, animations off",
+        "purpose": "All transitions and animations disabled under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px",
+        "purpose": "32px gutters; third game column reserved."
+      },
+      {
+        "name": "lg",
+        "value": "1024px",
+        "purpose": "Side column appears; section links move from bottom tabs to the top bar."
+      }
+    ],
+    "focusRing": {
+      "value": "2px solid #1f3fbf, offset 2px",
+      "purpose": "Every focusable element."
+    },
+    "layering": {
+      "value": "paper at 95% with backdrop-blur-sm",
+      "purpose": "Sticky top bar and sticky round headings only."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The Search submit; the only filled button.",
+      "html": "<button class=\"ds-btn-primary\">Search</button>",
+      "css": ".ds-btn-primary{height:48px;padding:0 24px;border:0;border-radius:4.8px;background:var(--form,#0b5d44);color:#fff;font:600 15px Archivo,sans-serif;cursor:pointer;transition:background-color .15s}.ds-btn-primary:hover{background:rgb(11 93 68/.9)}.ds-btn-primary:focus-visible{outline:2px solid var(--ring,#1f3fbf);outline-offset:2px}"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Filters and pagination.",
+      "html": "<a class=\"ds-btn-quiet\" href=\"#\">Next</a>",
+      "css": ".ds-btn-quiet{display:inline-flex;align-items:center;height:36px;padding:0 16px;border-radius:4.8px;background:#fff;color:#14171a;box-shadow:inset 0 0 0 1px #c3c8c0;font:500 14px Archivo,sans-serif;text-decoration:none;transition:background-color .15s}.ds-btn-quiet:hover{background:#f2f4f1}.ds-btn-quiet:focus-visible{outline:2px solid #1f3fbf;outline-offset:2px}"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "The player search, the product's front door.",
+      "html": "<label class=\"ds-search\"><svg aria-hidden=\"true\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input type=\"search\" placeholder=\"Player name, e.g. a surname\"></label>",
+      "css": ".ds-search{position:relative;display:block;max-width:520px}.ds-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#5d636b}.ds-search input{width:100%;height:48px;padding:0 12px 0 40px;border:1px solid #c3c8c0;border-radius:4.8px;background:#fff;color:#14171a;font:400 17px Archivo,sans-serif;transition:border-color .15s}.ds-search input::placeholder{color:#5d636b}.ds-search input:hover{border-color:rgb(20 23 26/.4)}.ds-search input:focus-visible{outline:2px solid #1f3fbf;outline-offset:2px}"
+    },
+    {
+      "name": "Section Heading",
+      "kind": "custom",
+      "refersTo": "title",
+      "description": "The only sectioning device: green condensed heading over a green rule.",
+      "html": "<div class=\"ds-sheet-head\"><h2>Results</h2><span>212 matches</span></div>",
+      "css": ".ds-sheet-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;border-bottom:1px solid #0b5d44;padding-bottom:6px;color:#0b5d44;font:700 15px Archivo,sans-serif;font-stretch:80%}.ds-sheet-head h2{margin:0;font:inherit}.ds-sheet-head span{font-weight:400;font-size:13px;font-stretch:100%;color:#5d636b}"
+    },
+    {
+      "name": "Form Strip",
+      "kind": "custom",
+      "refersTo": "mark-won",
+      "description": "Last decided results as W/L squares, oldest first.",
+      "html": "<ol class=\"ds-form\" aria-label=\"Last 5 decided matches, oldest first: 3 won\"><li class=\"w\">W</li><li class=\"w\">W</li><li class=\"l\">L</li><li class=\"w\">W</li><li class=\"l\">L</li></ol>",
+      "css": ".ds-form{display:flex;gap:4px;margin:0;padding:0;list-style:none}.ds-form li{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:3px;font:700 12px Archivo,sans-serif;font-variant-numeric:tabular-nums}.ds-form .w{background:#0b5d44;color:#fff}.ds-form .l{color:#a3271c;box-shadow:inset 0 0 0 1px #a3271c}"
+    },
+    {
+      "name": "GameSheet",
+      "kind": "custom",
+      "refersTo": "mark-won",
+      "description": "Scoresheet cell: one ruled column per game; viewed player's row in ballpoint blue.",
+      "html": "<span class=\"ds-sheet\"><span class=\"y b\">21</span><span class=\"o\">17</span><span class=\"y\">18</span><span class=\"o b\">21</span><span class=\"y b\">21</span><span class=\"o\">15</span></span>",
+      "css": ".ds-sheet{display:inline-grid;grid-auto-flow:column;grid-template-rows:auto auto;border:1px solid #b9c7bf;border-radius:3px;overflow:hidden;font:400 13px/18px Archivo,sans-serif;font-variant-numeric:tabular-nums}.ds-sheet span{width:28px;text-align:center;border-left:1px solid rgb(185 199 191/.7);color:#5d636b}.ds-sheet span:nth-child(-n+2){border-left:0}.ds-sheet .y{border-bottom:1px solid rgb(185 199 191/.7);color:#1f3fbf}.ds-sheet .b{font-weight:700}.ds-sheet .o.b{color:#14171a}"
+    },
+    {
+      "name": "Result Row",
+      "kind": "custom",
+      "refersTo": "body",
+      "description": "Winner first, d., the other side, games in fixed columns; the score opens the sheet.",
+      "html": "<div class=\"ds-row\"><span><b>A. Lim</b> <i>d.</i> R. Okafor</span><button aria-expanded=\"false\"><span>21–17</span><span>18–21</span><span>21–15</span> &#8250;</button></div>",
+      "css": ".ds-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px;border-bottom:1px solid #dcdfd9;font:400 15px Archivo,sans-serif;color:#14171a}.ds-row b{font-weight:600}.ds-row i{font-style:normal;color:#5d636b;padding:0 6px}.ds-row button{display:grid;grid-auto-flow:column;grid-auto-columns:3.25rem;align-items:center;min-height:40px;padding:0 8px;border:0;border-radius:4.8px;background:none;font:inherit;font-size:14px;text-align:right;cursor:pointer}.ds-row button:hover{background:#f2f4f1}.ds-row button:focus-visible{outline:2px solid #1f3fbf;outline-offset:2px}"
+    },
+    {
+      "name": "Status Note",
+      "kind": "custom",
+      "refersTo": "status-note",
+      "description": "A status the scores cannot show, written out.",
+      "html": "<span class=\"ds-status\">Score unavailable</span>",
+      "css": ".ds-status{display:inline-block;padding:2px 6px;border-radius:3px;background:#f2f4f1;color:#14171a;font:400 12px Archivo,sans-serif;white-space:nowrap}"
+    },
+    {
+      "name": "Discipline Tabs",
+      "kind": "nav",
+      "refersTo": "tab-current",
+      "description": "Joined condensed tabs with match counts; current filled form green.",
+      "html": "<nav class=\"ds-tabs\"><a aria-current=\"page\" href=\"#\">MS <small>64</small></a><a href=\"#\">WS <small>48</small></a><a href=\"#\">XD <small>32</small></a></nav>",
+      "css": ".ds-tabs{display:inline-flex;border:1px solid #c3c8c0;border-radius:6px;overflow:hidden}.ds-tabs a{display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-left:1px solid #c3c8c0;color:#14171a;font:600 14px Archivo,sans-serif;font-stretch:85%;text-decoration:none;transition:background-color .15s}.ds-tabs a:first-child{border-left:0}.ds-tabs a:hover{background:#f2f4f1}.ds-tabs small{font-weight:400;font-size:12px;color:#5d636b}.ds-tabs a[aria-current]{background:#0b5d44;color:#fff}.ds-tabs a[aria-current] small{color:rgb(255 255 255/.8)}.ds-tabs a:focus-visible{outline:2px solid #1f3fbf;outline-offset:-2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Umpire's Scoresheet",
+    "overview": "Mynton is a badminton reference that reads like the sheet an umpire fills in at courtside: a white ground, ruled lines printed in form green, the scores entered in ink, the viewed player's own points in ballpoint blue, the other side in pencil grey. Structure comes from rules and fixed columns, never from boxes. A page is one long ruled document with a narrow side column, dense enough to scan a whole season of results, quiet enough that the numbers are the only loud thing on it.\n\nThe system deliberately refuses the sports-app dashboard: no hero banner, no stat tiles, no card grid, no photography, no court illustrations. Its one typeface, Archivo, carries two voices through its width axis: condensed bold for names and headings, regular width for reading and figures. All figures are tabular so columns of scores line up like a printed sheet.\n\nThe scoresheet is also a promise about truth. Every value on screen was published by a source; what a source did not publish is written as absent, never drawn as a placeholder number.",
+    "keyCharacteristics": [
+      "White paper, ink text, one structural colour (form green) and one personal colour (ballpoint blue).",
+      "Hairline rules and green section rules in place of cards and panels.",
+      "One family, two widths: Archivo condensed for names and headings, normal width for reading.",
+      "Tabular figures everywhere; scores in fixed per-game columns.",
+      "Meaning carried by letters and words (W, L, \"Score unavailable\"), colour only reinforcing.",
+      "Flat: no shadows, no gradients, no imagery."
+    ],
+    "rules": [
+      {
+        "name": "The Two Pens Rule",
+        "body": "Ballpoint blue means \"the player you are viewing\" and nothing else (the focus ring is the only other use). Green structures the sheet; blue is the person.",
+        "section": "colors"
+      },
+      {
+        "name": "The Letter First Rule",
+        "body": "Colour never carries meaning alone. A result is W or L, a status is written out (\"Walkover\", \"Retired\", \"Score unavailable\"); green and red only reinforce the letter.",
+        "section": "colors"
+      },
+      {
+        "name": "The 4.5 Floor Rule",
+        "body": "Every text pair, including grey on wash, measures at least 4.5:1. A new tint must be measured before it ships.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Widths Rule",
+        "body": "Condensed width is for names and headings only; anything read as a sentence returns to 100% width, including the action text that sits beside a section heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "Headings and labels are sentence case at normal tracking. Federation codes (IND, CHN) are data and keep their capitals with slight tracking (0.04em); nothing else is uppercased or letter-spaced.",
+        "section": "typography"
+      },
+      {
+        "name": "The Summary Line Rule",
+        "body": "A profile's facts sit in one line between a 2px form-green rule above and a hairline below: record, win rate of decided matches, tournaments, last-ten W/L marks. Never as tiles.",
+        "section": "layout"
+      },
+      {
+        "name": "The Ruled Not Raised Rule",
+        "body": "If something needs separating, draw a line under it. Never lift it onto a card or a shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** separate content with rules: a 1px form-green rule under every section heading, hairlines between rows, a 2px green rule above the summary line.",
+      "**Do** set every figure in tabular numerals and every game score in its own fixed column.",
+      "**Do** keep ballpoint blue for the viewed player's scores and the focus ring only.",
+      "**Do** write results as letters and statuses as words; colour reinforces, never replaces.",
+      "**Do** mark absent data in words (\"Not recorded\", \"Score unavailable\", \"No decided final is published for this event\") and show provenance on every page.",
+      "**Do** keep every text pair at 4.5:1 or above, touch targets at 44px, and transitions off under reduced motion."
+    ],
+    "donts": [
+      "**Don't** use cards, rounded panels or shadows as page structure.",
+      "**Don't** build hero banners, stat tiles or KPI boxes; facts go in the summary line.",
+      "**Don't** put eyebrow labels or kickers over headings.",
+      "**Don't** use uppercase, letter-spaced labels (federation codes are data, not labels).",
+      "**Don't** add decorative court graphics, player photos or illustrations.",
+      "**Don't** use filled colour badge chips for categories or metadata. The filled W square and the wash status note are scoresheet marks, not chips.",
+      "**Don't** show a number the sources did not publish: no rankings, ratings, ages or live scores.",
+      "**Don't** use red anywhere but an L mark or a written loss status."
+    ]
+  }
+}

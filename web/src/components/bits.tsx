@@ -141,7 +141,7 @@ export function Select({ className, ...props }: ComponentProps<"select">) {
 
 /** The quiet secondary button: filters, pagination. */
 export const BUTTON_QUIET =
-  "inline-flex h-9 items-center justify-center rounded-md bg-card px-4 text-sm font-medium text-foreground ring-1 ring-input transition-colors hover:bg-muted";
+  "inline-flex h-11 items-center justify-center rounded-md bg-card px-4 text-sm font-medium text-foreground ring-1 ring-input transition-colors hover:bg-muted lg:h-9";
 
 /** A page section: a green condensed heading over a green hairline, like a printed form. */
 export function Section({
@@ -198,7 +198,7 @@ export function Pager({
     const s = q.toString();
     return s ? `${path}?${s}` : path;
   };
-  const link = cn(BUTTON_QUIET, "h-8 px-3 text-[13px]");
+  const link = cn(BUTTON_QUIET, "h-11 px-3 text-[13px] lg:h-8");
   return (
     <nav
       aria-label="Pages"
@@ -224,11 +224,22 @@ export function Pager({
 }
 
 /** A federation's country code, as results lists print it. */
-export function FedCode({ code, label }: { code: string; label?: string }) {
+export function FedCode({
+  code,
+  label,
+  onDark = false,
+}: {
+  code: string;
+  label?: string;
+  onDark?: boolean;
+}) {
   return (
     <span
       title={label}
-      className="shrink-0 text-[12px] font-semibold tracking-[0.04em] text-muted-foreground"
+      className={cn(
+        "shrink-0 text-[12px] font-semibold tracking-[0.04em]",
+        onDark ? "text-white/85" : "text-muted-foreground",
+      )}
     >
       <span aria-hidden={!!label}>{code}</span>
       {label && <span className="sr-only">{label}</span>}

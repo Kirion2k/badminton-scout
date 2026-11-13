@@ -8,9 +8,7 @@ export default function NotFound() {
     <Shell>
       <div className="mx-auto max-w-md py-16 text-center">
         <p className="num text-sm text-muted-foreground">404</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Nothing here
-        </h1>
+        <h1 className="mt-2 display text-[28px] leading-tight">Nothing here</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           This page doesn’t exist, or its records aren’t published on Badminton
           Scout.

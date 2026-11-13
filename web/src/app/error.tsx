@@ -12,7 +12,7 @@ export default function ErrorPage({
 }) {
   return (
     <main id="main" className="mx-auto max-w-md flex-1 px-4 py-24 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight">
+      <h1 className="display text-[28px] leading-tight">
         The data service didn’t answer
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">

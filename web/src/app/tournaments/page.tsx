@@ -410,14 +410,14 @@ function FederationLink({
       href={href}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "flex h-9 items-center justify-between gap-3 rounded-lg px-3 transition-colors",
+        "flex h-11 items-center justify-between gap-3 rounded-md px-3 transition-colors lg:h-9",
         current
           ? "bg-form font-medium text-white"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
-        {code && <FedCode code={code} />}
+        {code && <FedCode code={code} onDark={current} />}
         <span className="truncate">{label}</span>
       </span>
       <span className="num text-[12px]">{count.toLocaleString("en-AU")}</span>

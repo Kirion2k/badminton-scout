@@ -35,7 +35,7 @@ export function ExpandableRow({
           aria-controls={id}
           aria-label={label}
           onClick={() => setOpen(!open)}
-          className="-my-1 flex min-h-10 items-center gap-2 justify-self-end rounded-md px-2 text-[14px] whitespace-nowrap hover:bg-wash sm:justify-self-auto"
+          className="-my-1 flex min-h-11 items-center gap-2 justify-self-end rounded-md px-2 text-[14px] whitespace-nowrap hover:bg-wash sm:justify-self-auto"
         >
           {score}
           <ChevronRight
