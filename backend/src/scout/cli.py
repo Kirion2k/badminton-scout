@@ -346,6 +346,36 @@ def _imports() -> int:
     return 0
 
 
+def _identity_report() -> int:
+    """Identity quality (no requests): what was linked, why, and what remains separate."""
+    from sqlalchemy import func
+    from sqlalchemy.orm import Session
+
+    from scout.db import get_engine
+    from scout.identity_auto import duplicate_estimate
+    from scout.models import IdentityCandidate, IdentityDecision, Player, SourcePlayer
+
+    with Session(get_engine()) as s:
+        records = s.scalar(select(func.count()).select_from(SourcePlayer)) or 0
+        players = s.scalar(select(func.count()).where(Player.merged_into_id.is_(None))) or 0
+        print(f"source records: {records}; players: {players}")
+        actor_col = func.split_part(IdentityDecision.decided_by, ":", 1)
+        for actor, action, n in s.execute(
+            select(actor_col, IdentityDecision.action, func.count()).group_by(
+                actor_col, IdentityDecision.action
+            )
+        ):
+            print(f"  decisions by {actor}: {action} {n}")
+        for status, note, n in s.execute(
+            select(IdentityCandidate.status, IdentityCandidate.note, func.count())
+            .group_by(IdentityCandidate.status, IdentityCandidate.note)
+            .order_by(IdentityCandidate.status, func.count().desc())
+        ):
+            print(f"  candidates {status}: {n}{f' ({note})' if note else ''}")
+        print(f"possible remaining duplicates (upper bound): {duplicate_estimate(s)}")
+    return 0
+
+
 def _coverage() -> int:
     """What is in the database, per source: synthetic test data is reported separately."""
     from sqlalchemy import func, select
@@ -558,7 +588,20 @@ def _identity(args: argparse.Namespace) -> int:
     who = f"human:{getpass.getuser()}"
     with Session(get_engine()) as s:
         try:
-            if args.action == "candidates":
+            if args.action == "resolve":
+                from scout import identity_auto
+
+                identity.generate_candidates(s)
+                report = identity_auto.resolve(s)
+                s.commit()
+                e = report.evaluation
+                state = "enabled" if report.tier_b_enabled else "disabled"
+                print(f"tier B evaluation: recall {e.recall:.1%} on {e.positives} same-member "
+                      f"pairs; false links {e.false_link_rate:.1%} on {e.negatives} namesake "
+                      f"pairs; tier B {state}")  # fmt: skip
+                for outcome, n in sorted(report.outcomes.items()):
+                    print(f"  {outcome}: {n}")
+            elif args.action == "candidates":
                 print(f"new candidates: {identity.generate_candidates(s)}")
                 s.commit()
                 rows = s.scalars(
@@ -639,6 +682,9 @@ def main(argv: list[str] | None = None) -> None:
     ident = commands.add_parser("identity", help="review player identity candidates (ADR-0003)")
     ident_actions = ident.add_subparsers(dest="action", required=True)
     ident_actions.add_parser("candidates", help="find and list open candidates")
+    ident_actions.add_parser(
+        "resolve", help="link on stable ids, separate conflicts, defer the rest (ADR-0011)"
+    )
     review = (("merge", "candidate"), ("reject", "candidate"), ("undo", "merge decision"))
     for action, what in review:
         p = ident_actions.add_parser(action, help=f"{action} a {what}")
@@ -649,6 +695,7 @@ def main(argv: list[str] | None = None) -> None:
     reports.add_parser("coverage", help="per-source coverage and data quality")
     reports.add_parser("portals", help="every portal seen owning tournaments, and its status")
     reports.add_parser("imports", help="import completeness per source, and what is missing")
+    reports.add_parser("identity", help="identity links, conflicts, deferrals and undo history")
     aa = commands.add_parser("api-anything", help="API Anything runtime tools")
     aa.add_subparsers(dest="action", required=True).add_parser(
         "doctor", help="check node, the pinned runtime and approved operations"
@@ -691,5 +738,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "identity":
         sys.exit(_identity(args))
     elif args.command == "report":
-        reports_by_name = {"portals": _portals, "imports": _imports, "coverage": _coverage}
+        reports_by_name = {
+            "portals": _portals,
+            "imports": _imports,
+            "coverage": _coverage,
+            "identity": _identity_report,
+        }
         sys.exit(reports_by_name[args.report]())

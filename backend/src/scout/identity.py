@@ -1,4 +1,6 @@
-"""Human-reviewed identity merges (ADR-0003): candidates are suggested, never auto-applied."""
+"""Identity decisions (ADR-0003, ADR-0011): merge, reject and undo, each recorded and reversible.
+Humans may decide any candidate; `identity_auto` decides only on stable identifiers or corroborated
+evidence, never on name similarity alone."""
 
 from typing import Any
 
@@ -59,10 +61,17 @@ def _player_of(session: Session, source_player_id: int) -> int:
     return player
 
 
-def merge(session: Session, candidate_id: int, reason: str, decided_by: str) -> IdentityDecision:
+def merge(
+    session: Session,
+    candidate_id: int,
+    reason: str,
+    decided_by: str,
+    *,
+    allow_deferred: bool = False,
+) -> IdentityDecision:
     """Merge candidate b's player into a's. Reversible with `undo`."""
     c = session.get(IdentityCandidate, candidate_id)
-    if c is None or c.status != "open":
+    if c is None or c.status not in (("open", "deferred") if allow_deferred else ("open",)):
         raise ValueError(f"candidate {candidate_id} is not open")
     keep = _player_of(session, c.source_player_a_id)
     gone = _player_of(session, c.source_player_b_id)
@@ -99,9 +108,16 @@ def merge(session: Session, candidate_id: int, reason: str, decided_by: str) -> 
     return decision
 
 
-def reject(session: Session, candidate_id: int, reason: str, decided_by: str) -> IdentityDecision:
+def reject(
+    session: Session,
+    candidate_id: int,
+    reason: str,
+    decided_by: str,
+    *,
+    allow_deferred: bool = False,
+) -> IdentityDecision:
     c = session.get(IdentityCandidate, candidate_id)
-    if c is None or c.status != "open":
+    if c is None or c.status not in (("open", "deferred") if allow_deferred else ("open",)):
         raise ValueError(f"candidate {candidate_id} is not open")
     decision = IdentityDecision(
         action="reject",

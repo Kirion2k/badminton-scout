@@ -140,6 +140,8 @@ def sync_provider(
             raise
         if run.status == "incomplete":
             run.note = "request budget used up: the next pass resumes the queue"
+        if run.status != "failed":
+            counts += _resolve_identities(session)
         return _finish(session, run, counts)
 
 
@@ -233,6 +235,16 @@ def _search(
     elif found["listed"] >= 20 * BACKFILL_PAGES:
         counts["backfill:day_over_300"] += 1  # one day with more listings than a search shows
     return counts
+
+
+def _resolve_identities(session: Session) -> Counter[str]:
+    """New records may settle old doubts: re-run identity resolution (no requests, ADR-0011)."""
+    from scout import identity, identity_auto
+
+    identity.generate_candidates(session)
+    report = identity_auto.resolve(session)
+    session.commit()
+    return Counter({f"identity:{k}": v for k, v in report.outcomes.items()})
 
 
 def _stopped(counts: Counter[str]) -> bool:

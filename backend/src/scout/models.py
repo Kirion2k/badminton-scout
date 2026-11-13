@@ -284,7 +284,9 @@ class IdentityCandidate(Base):
     __table_args__ = (
         UniqueConstraint("source_player_a_id", "source_player_b_id"),
         CheckConstraint("source_player_a_id < source_player_b_id", name="ordered_pair"),
-        CheckConstraint("status IN ('open', 'accepted', 'rejected')", name="status_valid"),
+        CheckConstraint(
+            "status IN ('open', 'accepted', 'rejected', 'deferred')", name="status_valid"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -294,6 +296,7 @@ class IdentityCandidate(Base):
     status: Mapped[str] = mapped_column(String(16), server_default="open")
     decision_id: Mapped[int | None] = mapped_column(ForeignKey("identity_decision.id"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    note: Mapped[str | None] = mapped_column(Text)  # why it is deferred (identity_auto)
 
 
 class RequestLedger(Base):
