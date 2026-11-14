@@ -6,6 +6,7 @@ import sys
 from collections import Counter
 from contextlib import ExitStack
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -643,6 +644,34 @@ def _reclassify() -> int:
     return 0
 
 
+def _ratings(args: argparse.Namespace) -> int:
+    """Offline only: nothing here is served (ADR-0012)."""
+    import json
+
+    from scout.db import get_engine
+    from scout.ratings import commands
+
+    engine = get_engine()
+    if args.action == "snapshot":
+        sid = commands.take_snapshot(engine, args.family, include_retired=args.include_retired)
+        print(f"snapshot {sid}")
+    elif args.action == "tune":
+        selected = commands.tune(engine, args.family, args.snapshot)
+        args.out.write_text(json.dumps(selected, indent=1))
+        print(f"selection written to {args.out}: commit it before `scout ratings evaluate`")
+    elif args.action == "evaluate":
+        result = commands.evaluate(engine, args.family, args.selection, args.out)
+        for key, m in result["models"].items():
+            t = m["test"]["all"]
+            ll = t.get("log_loss", {})
+            print(f"{key}: run {m['run_id']}, test {t['predicted']}/{t['matches']} predicted, "
+                  f"log loss {ll.get('mean', float('nan')):.4f}")  # fmt: skip
+    else:
+        commands.audit(engine, {"bwf": args.bwf, "fed": args.fed}, args.out)
+        print(f"audit written to {args.out}")
+    return 0
+
+
 def _events(args: argparse.Namespace) -> int:
     """Discipline and category of every Tournament Software event, read in its tournament's
     language. Changes are counted by source and old->new discipline."""
@@ -733,8 +762,6 @@ def _identity(args: argparse.Namespace) -> int:
 
 def _import_compilation(args: argparse.Namespace) -> int:
     """The third-party BWF compilation, from a local checkout; no network (ADR-0002 grant)."""
-    from pathlib import Path
-
     from sqlalchemy.orm import Session
 
     from scout.db import get_engine
@@ -822,6 +849,23 @@ def main(argv: list[str] | None = None) -> None:
         p = privacy_actions.add_parser(action, help=f"{what}: one player, audited")
         p.add_argument("player", type=int, help="player id (as in /players/<id>)")
         p.add_argument("--reason", required=True, help="who asked and why: kept in the audit log")
+    ratings = commands.add_parser("ratings", help="offline rating research (ADR-0012)")
+    ratings_actions = ratings.add_subparsers(dest="action", required=True)
+    snap = ratings_actions.add_parser("snapshot", help="freeze the eligible matches")
+    snap.add_argument("family", choices=["bwf", "fed"])
+    snap.add_argument("--include-retired", action="store_true", help="the sensitivity variant")
+    tune = ratings_actions.add_parser("tune", help="select configurations on validation only")
+    tune.add_argument("family", choices=["bwf", "fed"])
+    tune.add_argument("snapshot", type=int)
+    tune.add_argument("--out", type=Path, required=True, help="selection JSON: commit it next")
+    ev = ratings_actions.add_parser("evaluate", help="score the committed selection on test, once")
+    ev.add_argument("family", choices=["bwf", "fed"])
+    ev.add_argument("selection", type=Path)
+    ev.add_argument("--out", type=Path, required=True)
+    au = ratings_actions.add_parser("audit", help="identity, duplicates and connectivity counts")
+    au.add_argument("--bwf", type=int, required=True, help="BWF snapshot id")
+    au.add_argument("--fed", type=int, required=True, help="federation snapshot id")
+    au.add_argument("--out", type=Path, required=True)
     events = commands.add_parser("events", help="event classification")
     reclassify = events.add_subparsers(dest="action", required=True).add_parser(
         "reclassify", help="re-read disciplines and categories from codes (docs/event-codes.md)"
@@ -860,8 +904,6 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "sync":
         sys.exit(_sync(args))
     elif args.command == "seed":
-        from pathlib import Path
-
         from sqlalchemy.orm import Session
 
         from scout.config import get_settings
@@ -888,6 +930,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(actions[args.action]() if args.action in actions else _withhold(args))
     elif args.command == "events":
         sys.exit(_events(args))
+    elif args.command == "ratings":
+        sys.exit(_ratings(args))
     elif args.command == "identity":
         sys.exit(_identity(args))
     elif args.command == "report":
