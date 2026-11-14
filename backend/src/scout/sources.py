@@ -85,6 +85,17 @@ SOURCES: Mapping[str, SourceRights] = MappingProxyType(
                 "search (hn.algolia.com) read transiently. See docs/data-sources.md."
             ),
         ),
+        # A file import, never fetched by the runtime: no hosts, so no request budget applies.
+        "bwf_historical_compilation": SourceRights(
+            grants=frozenset(Use),
+            evidence=(
+                "Owner attestation by Leo Xu, 2026-11-14: the compiler of "
+                "github.com/SahilMotyar/bwf-match-data granted Mynton use and redistribution, and "
+                "BWF authorised all uses of its data (2026-11-12). The written grant has not been "
+                "supplied or independently verified. Imported from commit 0a68991. See "
+                "docs/data-sources.md."
+            ),
+        ),
         "bwf": SourceRights(
             grants=frozenset(Use),
             evidence=_OWNER_ATTESTED.format(provider="BWF"),

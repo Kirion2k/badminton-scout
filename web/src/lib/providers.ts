@@ -13,6 +13,10 @@ export const PROVIDER_STATUS: Record<
   pending_access: { text: "Pending technical access", tone: "waiting" },
   access_unavailable: { text: "Access unavailable", tone: "bad" },
   source_error: { text: "Source error", tone: "bad" },
+  historical_archive: {
+    text: "Historical archive · file import",
+    tone: "partial",
+  },
 };
 
 // The last scheduled pass for a provider (GET /v1/coverage `last_sync_status`).
@@ -85,6 +89,11 @@ export const FEDERATION: Record<
     code: "BWF",
   },
   bwf: { label: "BWF", country: null, code: "BWF" },
+  bwf_historical_compilation: {
+    label: "BWF results (historical compilation)",
+    country: null,
+    code: "BWF",
+  },
 };
 
 // Short labels for rows and filters, keyed by source id.

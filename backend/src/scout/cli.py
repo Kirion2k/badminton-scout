@@ -700,6 +700,40 @@ def _identity(args: argparse.Namespace) -> int:
     return 0
 
 
+def _import_compilation(args: argparse.Namespace) -> int:
+    """The third-party BWF compilation, from a local checkout; no network (ADR-0002 grant)."""
+    from pathlib import Path
+
+    from sqlalchemy.orm import Session
+
+    from scout.db import get_engine
+    from scout.ingest import bwf_compilation
+    from scout.models import IngestRun
+
+    rows, index = bwf_compilation.read(Path(args.path))
+    if args.limit:
+        rows = rows[: args.limit]
+    with Session(get_engine()) as s:
+        run = IngestRun(source_id=bwf_compilation.SOURCE)
+        s.add(run)
+        s.flush()
+        counts = bwf_compilation.ingest(
+            s, run, rows, index, commit_every=None if args.dry_run else 20
+        )
+        if args.dry_run:
+            s.rollback()
+        else:
+            from datetime import UTC, datetime
+
+            run.status, run.counts = "succeeded", dict(counts)
+            run.finished_at = datetime.now(UTC)
+            s.commit()
+    print(f"{'DRY RUN (rolled back): ' if args.dry_run else ''}{len(rows)} rows")
+    for k, v in sorted(counts.items()):
+        print(f"  {k}: {v}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="scout", description="Badminton Scout backend tools")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -722,6 +756,12 @@ def main(argv: list[str] | None = None) -> None:
     imp.add_argument(
         "--renormalize", action="store_true", help="with --tournament: re-apply current rules"
     )
+    comp = commands.add_parser(
+        "import-compilation", help="import the bwf-match-data files (bwf_historical_compilation)"
+    )
+    comp.add_argument("path", help="a checkout of github.com/SahilMotyar/bwf-match-data")
+    comp.add_argument("--dry-run", action="store_true", help="import, report, then roll back")
+    comp.add_argument("--limit", type=int, help="only the first N rows (a representative sample)")
     commands.add_parser("openapi", help="print the API's OpenAPI document (frontend type source)")
     seed = commands.add_parser("seed", help="synthetic fixtures")
     seed_e2e = seed.add_subparsers(dest="action", required=True).add_parser(
@@ -794,6 +834,8 @@ def main(argv: list[str] | None = None) -> None:
         with Session(get_engine()) as s:
             ids = seed(s, Path(args.ids_out) if args.ids_out else None)
         print(f"seeded e2e fixture: {ids}")
+    elif args.command == "import-compilation":
+        sys.exit(_import_compilation(args))
     elif args.command == "openapi":
         import json
 

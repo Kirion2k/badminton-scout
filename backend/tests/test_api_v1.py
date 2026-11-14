@@ -421,3 +421,19 @@ async def test_event_winner_comes_only_from_a_decided_final(
     data.flush()
     body = (await api.get(f"/v1/tournaments/{t.id}")).json()
     assert next(e for e in body["events"] if e["discipline"] == "MS")["winner"] is None
+
+
+async def test_a_file_archive_is_listed_as_an_archive_never_as_connected(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    def status() -> str:
+        return next(p for p in body["providers"] if p["source_id"] == "bwf_historical_compilation")[
+            "status"
+        ]
+
+    body = (await api.get("/v1/coverage")).json()
+    assert status() == "pending_access"  # listed before anything is imported
+    data.execute(update(Tournament).values(source_id="bwf_historical_compilation"))
+    data.flush()
+    body = (await api.get("/v1/coverage")).json()
+    assert status() == "historical_archive"

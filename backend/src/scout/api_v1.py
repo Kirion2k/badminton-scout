@@ -184,6 +184,7 @@ ProviderStatus = Literal[
     "pending_access",
     "access_unavailable",
     "source_error",
+    "historical_archive",
 ]
 
 
@@ -831,7 +832,18 @@ def tournament_matches(
 
 
 # Known limits per provider: descriptive text, shown beside the derived status.
+# imported once from files, never fetched: an archive, not a connection
+FILE_SOURCES = frozenset({"bwf_historical_compilation"})
+
 _LIMITATIONS: dict[str, list[str]] = {
+    "bwf_historical_compilation": [
+        "A third-party compilation (github.com/SahilMotyar/bwf-match-data, commit 0a68991) of "
+        "BWF elite results, 2007 to July 2026; not a live BWF connection.",
+        "Players are identified by name within the compilation (BWF ids only where the compiler "
+        "added one), so they are not linked to federation records.",
+        "The compilation leaves out walkovers and does not mark retirements; Mynton marks a match "
+        "retired when its scores stop short, and quarantines scores that contradict the winner.",
+    ],
     "tournamentsoftware_ba": [
         "The portal's own listing reaches back about six months; older tournaments arrive via "
         "the global search.",
@@ -856,6 +868,8 @@ def _status(source_id: str, stored: int, recent_runs: list[str]) -> ProviderStat
     first; one tournament that fails (another sport, a removed page) is not an outage."""
     from scout.ingest.operations import OPERATIONS
 
+    if source_id in FILE_SOURCES:
+        return "historical_archive" if stored > 0 else "pending_access"
     if len(recent_runs) >= 3 and "succeeded" not in recent_runs[:10]:
         return "source_error"
     if stored > 0:
@@ -870,7 +884,7 @@ def coverage(db: DB) -> Coverage:
     """Per provider: derived status and counts. Public counts include served data only."""
     visible = select(_visible_matches().subquery().c.id)
     # every authorised provider with hosts, in registry order: the global integration tracker
-    listed = [sid for sid, rights in SOURCES.items() if rights.hosts]
+    listed = [sid for sid, rights in SOURCES.items() if rights.hosts or sid in FILE_SOURCES]
     sources = {s.id: s for s in db.scalars(select(Source).where(Source.id.in_(listed)))}
 
     def per_source(query: Any) -> dict[str, Any]:
