@@ -109,3 +109,42 @@ recorded against source `bwf`.
 
 With either, record `extranet-lv.bwfbadminton.com` and its robots exception in `data-sources.md`;
 the operations are then plain tier-1 GETs.
+
+## The published acquisition code (github.com/SahilMotyar/badminton-elo, read 2026-11-14)
+
+`fetch_bwf.py` and `badminton/bwf.py` pull from the same API host the M7 investigation found,
+with two operations the investigation had not observed:
+
+| Operation | Request | Response used |
+|---|---|---|
+| Tournament search | `GET extranet-lv.bwfbadminton.com/api/vue-tournaments-search?startDate=Y-01-01&endDate=Y-12-31&page=N&perPage=100&drawCount=1&activeTab=6` (one year per call; deeper pagination times out) | `results.data[]` (`id`, `name`, `start_date`, `end_date`, `location`, `category`), `results.last_page` |
+| Tournament matches | `GET …/api/vue-tournament-matches?drawCount=0&searchKey=&tmtId={id}&tmtType=0&isPara=false` (one call per tournament) | `results.by_time.time_group[]` (older events) and/or `results.by_court{section:{key:match}}` (newer); per match `id`, `draw_name` ("MS - Qualification"), `round_name`, `winner` (1/2), `team1Score`/`team2Score` (`<span>21</span>` per game), `start_time` (unix), `t{1,2}p{1,2}_detail` (`id`, `name_display`, `nationality`) |
+
+- **How it was fetched:** plain `urllib` with a browser user agent, no auth or cookies,
+  1.3 s between calls, last pushed 2026-07.
+- **Today, the same request is challenged.** The plain-HTTP GET to that host returns 403
+  `cf-mitigated: challenge` (M7 tests above). Their success in 2026-07 does not show the endpoint
+  is open now.
+- **Two diagnostics were not sent.** Repeating the published requests verbatim was blocked by this
+  environment's permission policy (unauthorised-access classifier); nothing worked around it.
+- **The normaliser is ported:** `backend/src/scout/ingest/bwf.py`, tests in `tests/test_bwf.py`
+  on synthetic payloads.
+  - **Kept from the published code:** the by_time/by_court flattening with match-id dedupe, the
+    discipline and qualification parse, the game parse, and BWF player ids as the identity key.
+  - **Changed for Mynton:**
+    - walkovers are kept;
+    - retirements are detected by the scoring law (the published CSV leaves 111 unannotated);
+    - each match is a revisioned raw record keyed by BWF match id;
+    - storage goes through the shared `write_match` path (provenance, identity, privacy).
+- **No live operation is registered.** That needs both:
+  - `extranet-lv.bwfbadminton.com` and a robots exception recorded in scope;
+  - a route that is not challenged (an allowlist, a token, or a feed).
+
+**The dataset itself is not usable.** `bwf-match-data` (105,147 matches) remains **no granted
+use** (ADR-0002, `data-sources.md`): it has no licence, and its README says the data is BWF's
+property. Importing it would need a recorded grant, as its own source with third-party provenance
+(never labelled as direct BWF data). It also lacks player and match ids, so it could not link
+reliably to live BWF data later.
+
+The official API portal (`extranet-api.bwf.sport`) was not inspected: the request was blocked by
+the same permission policy.
