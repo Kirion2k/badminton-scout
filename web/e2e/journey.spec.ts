@@ -178,3 +178,51 @@ test("a result row opens to its scoresheet and closes again", async ({
   await toggle.press("Enter");
   await expect(panel).toBeHidden();
 });
+
+test("compare two players, open a shared match's tournament, come back", async ({
+  page,
+}) => {
+  await page.goto(`/players/${ids().alex}`);
+  await page.getByRole("link", { name: /^Compare with Sam EXAMPLE$/ }).click();
+  await expect(page).toHaveURL(/\/players\/\d+\/vs\/\d+$/);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /Alex TESTER\s*v\s*Sam EXAMPLE/,
+    }),
+  ).toBeVisible();
+  const meetings = page.getByRole("region", { name: "Meetings, newest first" });
+  await expect(meetings.getByRole("listitem").first()).toBeVisible();
+  const compareUrl = page.url();
+  await meetings
+    .getByRole("link", { name: "Synthetic Spring Open 2026" })
+    .first()
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/tournaments/${ids().spring}`));
+  await page.goBack();
+  await expect(page).toHaveURL(compareUrl); // back lands on the same comparison
+  // the other way round, from the comparison's own link
+  await page.getByRole("link", { name: /See it from Sam EXAMPLE/ }).click();
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: /Sam EXAMPLE\s*v\s*Alex TESTER/,
+    }),
+  ).toBeVisible();
+});
+
+test("pick any player to compare with by name", async ({ page }) => {
+  await page.goto(`/players/${ids().alex}`);
+  const form = page.getByRole("search", {
+    name: "Compare with another player",
+  });
+  await form.getByRole("searchbox").fill("kim sample");
+  await form.getByRole("button", { name: "Find" }).click();
+  await expect(page).toHaveURL(/\/vs\?q=kim\+sample/);
+  await page
+    .getByRole("link", { name: /Kim SAMPLE/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/players\/\d+\/vs\/\d+$/);
+  await expect(page.getByText(/meeting/).first()).toBeVisible();
+});

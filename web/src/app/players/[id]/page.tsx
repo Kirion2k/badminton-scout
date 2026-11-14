@@ -10,12 +10,11 @@ import {
   FormStrip,
   LINK,
   Pager,
-  ResultBadge,
   RowsSkeleton,
   Section,
   Select,
 } from "@/components/bits";
-import { GameSheet, People, StatusNote } from "@/components/scoresheet";
+import { MatchHistory } from "@/components/match-history";
 import { Shell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type PlayerMatch, type PlayerProfile, api } from "@/lib/api/client";
@@ -25,7 +24,6 @@ import {
   formatRetrieved,
   one,
   positiveInt,
-  statusNote,
   validYear,
 } from "@/lib/format";
 
@@ -91,7 +89,16 @@ async function Profile({ params, searchParams }: PageProps<"/players/[id]">) {
 
   return (
     <>
-      <Header profile={profile} form={form} />
+      <Header
+        profile={profile}
+        form={form}
+        hasPartners={recent.items.some(
+          (m) =>
+            m.result &&
+            m.status !== "not_played" &&
+            m.partners.some((p) => !p.withheld),
+        )}
+      />
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <Section
           title="Results"
@@ -143,6 +150,7 @@ async function Profile({ params, searchParams }: PageProps<"/players/[id]">) {
           />
         </Section>
         <aside className="min-w-0 space-y-8" aria-label="Player summary">
+          <WinRate profile={profile} />
           <ByDiscipline profile={profile} />
           <Opponents profile={profile} />
           <Partners matches={recent.items} />
@@ -156,9 +164,11 @@ async function Profile({ params, searchParams }: PageProps<"/players/[id]">) {
 function Header({
   profile,
   form,
+  hasPartners,
 }: {
   profile: PlayerProfile;
   form: ("won" | "lost")[];
+  hasPartners: boolean;
 }) {
   const { record } = profile;
   const rate = record.played
@@ -191,12 +201,16 @@ function Header({
         <a href="#head-to-head" className="underline">
           Head-to-head
         </a>
-        <a href="#partners" className="underline">
-          Partners
-        </a>
-        <a href="#by-discipline" className="underline">
-          By discipline
-        </a>
+        {hasPartners && (
+          <a href="#partners" className="underline">
+            Partners
+          </a>
+        )}
+        {profile.by_discipline.length > 0 && (
+          <a href="#by-discipline" className="underline">
+            By discipline
+          </a>
+        )}
       </nav>
       <dl className="mt-4 flex flex-wrap items-baseline gap-x-8 gap-y-3 border-t-2 border-b border-t-form border-b-border py-3">
         <div
@@ -300,18 +314,103 @@ function Opponents({ profile }: { profile: PlayerProfile }) {
               >
                 {o.name}
               </Link>
-              <span
-                className="num shrink-0"
-                title={`${o.played} decided matches`}
-              >
-                {o.won}
-                <span className="text-subtle">–</span>
-                {o.lost}
+              <span className="flex shrink-0 items-baseline gap-3">
+                <span className="num" title={`${o.played} decided matches`}>
+                  {o.won}
+                  <span className="text-subtle">–</span>
+                  {o.lost}
+                </span>
+                <Link
+                  href={`/players/${profile.id}/vs/${o.id}`}
+                  className="text-[13px] text-form underline"
+                  aria-label={`Compare with ${o.name}`}
+                >
+                  Compare
+                </Link>
               </span>
             </li>
           ))}
         </ul>
       )}
+      <form
+        action={`/players/${profile.id}/vs`}
+        method="get"
+        role="search"
+        aria-label="Compare with another player"
+        className="mt-3 flex gap-2"
+      >
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">Compare with another player</span>
+          <input
+            name="q"
+            type="search"
+            required
+            minLength={2}
+            maxLength={100}
+            autoComplete="off"
+            placeholder="Compare with…"
+            className="control w-full"
+          />
+        </label>
+        <button type="submit" className={BUTTON_QUIET}>
+          Find
+        </button>
+      </form>
+    </Section>
+  );
+}
+
+/** Win rate over fixed windows and by format: decided matches only, counted from stored results. */
+function WinRate({ profile }: { profile: PlayerProfile }) {
+  const pct = (w: number, l: number) =>
+    w + l ? `${Math.round((w / (w + l)) * 100)}%` : "–";
+  const rows: [string, number, number][] = [
+    ...profile.periods.map(
+      (p) => [p.label, p.won, p.lost] as [string, number, number],
+    ),
+    ...profile.by_format.map(
+      (f) =>
+        [f.format === "singles" ? "Singles" : "Doubles", f.won, f.lost] as [
+          string,
+          number,
+          number,
+        ],
+    ),
+  ];
+  return (
+    <Section id="win-rate" title="Win rate">
+      <table className="w-full text-[14px]">
+        <caption className="sr-only">
+          Decided matches won and lost, by period and format
+        </caption>
+        <tbody>
+          {rows.map(([label, w, l], i) => (
+            <tr
+              key={label}
+              className={
+                i === profile.periods.length ? "border-t-2 border-border" : ""
+              }
+            >
+              <th
+                scope="row"
+                className="border-b border-border py-2 text-left font-normal"
+              >
+                {label}
+              </th>
+              <td className="num border-b border-border py-2 text-right">
+                {w}–{l}
+              </td>
+              <td className="num w-14 border-b border-border py-2 text-right text-muted-foreground">
+                {pct(w, l)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="pt-2 text-[12px] text-subtle">
+        Periods end today. Decided matches only: a walkover counts, a match not
+        played does not. Singles is MS and WS; doubles is MD, WD and XD.
+      </p>
     </Section>
   );
 }
@@ -454,90 +553,6 @@ function Filters({
         </Link>
       )}
     </form>
-  );
-}
-
-/** The history, grouped by tournament as it was played: a tournament line, then one row per
- * match with the scoresheet (this player's side on top, in blue) and the result mark. */
-function MatchHistory({ matches }: { matches: PlayerMatch[] }) {
-  const groups: { id: number; name: string; rows: PlayerMatch[] }[] = [];
-  for (const m of matches) {
-    const last = groups.at(-1);
-    if (last && last.id === m.tournament.id) last.rows.push(m);
-    else
-      groups.push({
-        id: m.tournament.id,
-        name: m.tournament.name ?? "Tournament",
-        rows: [m],
-      });
-  }
-  return (
-    <section aria-label="Matches, newest first">
-      {groups.map((g, i) => {
-        const won = g.rows.filter((m) => m.result === "won").length;
-        const lost = g.rows.filter((m) => m.result === "lost").length;
-        return (
-          <div key={`${g.id}-${i}`} className="mt-3 first:mt-0">
-            <div className="flex items-baseline justify-between gap-3 bg-wash px-2 py-1.5">
-              <Link
-                href={`/tournaments/${g.id}`}
-                className="min-w-0 text-[14px] font-semibold hover:underline"
-              >
-                {g.name}
-              </Link>
-              <span className="num shrink-0 text-[12px] text-muted-foreground">
-                {formatDate(g.rows.at(-1)?.played_on)} · {won}–{lost}
-              </span>
-            </div>
-            <ul>
-              {g.rows.map((m) => (
-                <MatchRow key={m.id} m={m} />
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-
-function MatchRow({ m }: { m: PlayerMatch }) {
-  const note = statusNote(m.status);
-  return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 border-b border-border px-2 py-2 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto_auto]">
-      <span className="num hidden text-[13px] text-muted-foreground sm:block">
-        {formatDate(m.played_on).replace(/ \d{4}$/, "")}
-      </span>
-      <span className="min-w-0 leading-snug">
-        <span className="block">
-          <span className="text-subtle">vs </span>
-          <People people={m.opponents} />
-        </span>
-        <span className="block text-[12px] text-subtle">
-          {m.event}
-          {m.round ? ` · ${m.round}` : ""}
-          {m.partners.length > 0 && (
-            <>
-              {" · with "}
-              <People people={m.partners} />
-            </>
-          )}
-        </span>
-      </span>
-      <span className="justify-self-end" title={`Source: ${m.source}`}>
-        {note && m.games.length === 0 ? (
-          <StatusNote>{note}</StatusNote>
-        ) : (
-          <span className="flex items-center gap-2">
-            {note && <StatusNote>{note}</StatusNote>}
-            <GameSheet games={m.games} you />
-          </span>
-        )}
-      </span>
-      <span className="justify-self-end">
-        <ResultBadge status={m.status} result={m.result ?? null} />
-      </span>
-    </li>
   );
 }
 

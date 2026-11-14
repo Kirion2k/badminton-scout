@@ -1,13 +1,13 @@
 """Read API over normalized data. Only redistributable events are ever visible (ADR-0009)."""
 
 from collections import Counter, defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, Select, func, literal, or_, select
+from sqlalchemy import ColumnElement, Select, exists, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 import scout.privacy
@@ -79,8 +79,32 @@ class DisciplineRecord(BaseModel):
     lost: int  # decided matches only, as in Record
 
 
+class PeriodRecord(BaseModel):
+    """Decided matches played on or after `since` (a calendar window ending today)."""
+
+    label: str  # "Last 12 months"
+    since: date | None  # None: all time
+    won: int
+    lost: int
+
+
+Format = Literal["singles", "doubles"]
+_FORMATS: tuple[tuple[Format, tuple[str, ...]], ...] = (
+    ("singles", ("MS", "WS")),
+    ("doubles", ("MD", "WD", "XD")),
+)
+
+
+class FormatRecord(BaseModel):
+    format: Format  # MS/WS; MD/WD/XD
+    won: int
+    lost: int
+
+
 class PlayerProfile(PlayerRef):
     record: Record
+    periods: list[PeriodRecord]  # last 12 months, last 3 years, all time
+    by_format: list[FormatRecord]
     by_discipline: list[DisciplineRecord]  # most played first
     tournaments: int
     tournament_history: list[TournamentAppearance]  # newest first
@@ -90,6 +114,21 @@ class PlayerProfile(PlayerRef):
     disciplines: list[str]
     sources: list[str]  # attribution of every source the profile draws on
     data_retrieved_at: datetime | None
+
+
+class CommonOpponent(PlayerRef):
+    """Someone both players have met in decided matches; each record from that player's side."""
+
+    a_won: int
+    a_lost: int
+    b_won: int
+    b_lost: int
+
+
+class HeadToHeadDiscipline(BaseModel):
+    discipline: str
+    a_won: int
+    b_won: int
 
 
 class TournamentRef(BaseModel):
@@ -118,6 +157,27 @@ class MatchPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class HeadToHead(BaseModel):
+    """Matches where the two players were on opposite sides, from player A's side.
+
+    Meetings count every stored match between them; wins count decided matches only (a walkover,
+    retirement, disqualification or winner-only result counts, a match not played does not).
+    """
+
+    a: PlayerRef
+    b: PlayerRef
+    meetings: int
+    decided: int
+    a_won: int
+    b_won: int
+    walkovers: int  # included in the wins above
+    first_met: date | None
+    last_met: date | None
+    by_discipline: list[HeadToHeadDiscipline]
+    matches: list[PlayerMatch]  # newest first, every meeting
+    common_opponents: list[CommonOpponent]  # most met first, at most 10
 
 
 class EventSummary(BaseModel):
@@ -382,6 +442,14 @@ def _people_and_games(
 
 
 def _player_or_redirect(db: Session, player_id: int, suffix: str = "") -> Player | RedirectResponse:
+    player = _canonical(db, player_id)
+    if player.id != player_id:
+        return RedirectResponse(f"/v1/players/{player.id}{suffix}", status_code=308)
+    return player
+
+
+def _canonical(db: Session, player_id: int) -> Player:
+    """The player a (possibly merged) id now belongs to; 404 for unknown, withheld or hidden."""
     player = db.get(Player, player_id)
     hops, withheld = 0, player is not None and player.withheld_at is not None
     while player is not None and player.merged_into_id is not None and hops < 5:  # ADR-0003
@@ -391,8 +459,6 @@ def _player_or_redirect(db: Session, player_id: int, suffix: str = "") -> Player
         raise HTTPException(404, "no such player")  # withheld: the same answer as unknown
     if not db.scalar(select(func.count()).select_from(_sides_of(player.id).subquery())):
         raise HTTPException(404, "no such player")  # also hides players seen only in junior events
-    if player.id != player_id:
-        return RedirectResponse(f"/v1/players/{player.id}{suffix}", status_code=308)
     return player
 
 
@@ -490,30 +556,47 @@ def player_profile(db: DB, player_id: int) -> PlayerProfile | RedirectResponse:
         reverse=True,
     )
 
-    my_side = {r.id: r.side for r in decided}
-    outcome = {r.id: r.winner_side == r.side for r in decided}
-    faced: dict[int, list[int]] = defaultdict(lambda: [0, 0])
-    names: dict[int, str] = {}
-    for match_id, side, pid, name in db.execute(
-        select(MatchSide.match_id, MatchSide.side, Player.id, Player.display_name)
-        .join(MatchSidePlayer, MatchSidePlayer.match_side_id == MatchSide.id)
-        .join(PlayerLink, PlayerLink.source_player_id == MatchSidePlayer.source_player_id)
-        .join(Player, Player.id == PlayerLink.player_id)
-        .where(MatchSide.match_id.in_(list(my_side)), Player.withheld_at.is_(None))
-    ):
-        if side != my_side[match_id]:
-            faced[pid][0 if outcome[match_id] else 1] += 1
-            names[pid] = name
+    faced = _faced(db, player.id)
     opponents = sorted(
         (
-            OpponentRecord(id=pid, name=names[pid], played=w + lo, won=w, lost=lo)
-            for pid, (w, lo) in faced.items()
+            OpponentRecord(id=pid, name=name, played=w + lo, won=w, lost=lo)
+            for pid, (name, w, lo) in faced.items()
         ),
         key=lambda o: (-o.played, o.name),
     )[:10]
+    today = date.today()
+    windows = [
+        ("Last 12 months", today - timedelta(days=365)),
+        ("Last 3 years", today - timedelta(days=3 * 365)),
+        ("All time", None),
+    ]
+    periods = [
+        PeriodRecord(
+            label=label,
+            since=since,
+            won=sum(r.winner_side == r.side for r in recent),
+            lost=sum(r.winner_side != r.side for r in recent),
+        )
+        for label, since in windows
+        for recent in [
+            [r for r in decided if since is None or (r.played_on and r.played_on >= since)]
+        ]
+    ]
+    by_format = [
+        FormatRecord(
+            format=fmt,
+            won=sum(r.winner_side == r.side for r in group),
+            lost=sum(r.winner_side != r.side for r in group),
+        )
+        for fmt, codes in _FORMATS
+        for group in [[r for r in decided if r.discipline in codes]]
+        if group
+    ]
     return PlayerProfile(
         id=player.id,
         name=player.display_name,
+        periods=periods,
+        by_format=by_format,
         record=Record(
             played=len(decided),
             won=won,
@@ -577,6 +660,20 @@ def player_matches(
         filters.append(Match.winner_side == sides.c.side)
     elif result == "lost":
         filters.append(Match.winner_side != sides.c.side)  # NULL (undecided) matches neither
+    items, total = _match_items(db, player.id, sides, filters, limit, offset)
+    return MatchPage(items=items, total=total, limit=limit, offset=offset)
+
+
+def _match_items(
+    db: Session,
+    player_id: int,
+    sides: Any,
+    filters: list[ColumnElement[bool]],
+    limit: int | None,
+    offset: int = 0,
+) -> tuple[list[PlayerMatch], int]:
+    """A player's matches from their side, newest first, with the total before paging. `sides` is
+    `_sides_of(player_id).subquery()`; `filters` may refer to its `side` column."""
     matching = (
         select(Match.id)
         .join(sides, sides.c.match_id == Match.id)
@@ -584,7 +681,7 @@ def player_matches(
         .where(*filters)
     )
     total = db.scalar(select(func.count()).select_from(matching.subquery())) or 0
-    rows = db.execute(
+    query = (
         select(
             Match,
             sides.c.side,
@@ -603,9 +700,9 @@ def player_matches(
         .join(Source, Source.id == IngestRun.source_id)
         .where(*filters)
         .order_by(Match.played_on.desc().nulls_last(), Match.id.desc())
-        .limit(limit)
         .offset(offset)
-    ).all()
+    )
+    rows = db.execute(query.limit(limit) if limit is not None else query).all()
     people, games = _people_and_games(db, [r[0].id for r in rows])
 
     items: list[PlayerMatch] = []
@@ -622,13 +719,91 @@ def player_matches(
                 status=m.status,
                 result=_result(m.winner_side, side),
                 games=[(a, b) if side == 1 else (b, a) for a, b in games[m.id]],
-                partners=[p for p in people[(m.id, side)] if p.id != player.id],
+                partners=[p for p in people[(m.id, side)] if p.id != player_id],
                 opponents=people[(m.id, other)],
                 source=attribution,
                 retrieved_at=retrieved,
             )
         )
-    return MatchPage(items=items, total=total, limit=limit, offset=offset)
+    return items, total
+
+
+def _faced(db: Session, player_id: int) -> dict[int, tuple[str, int, int]]:
+    """{opponent id: (name, won, lost)} over decided visible matches, from this player's side.
+    Withheld opponents are left out; a doubles match counts once for each opponent faced."""
+    sides = _sides_of(player_id).subquery()
+    mine = {
+        match_id: (side, winner == side)
+        for match_id, side, winner in db.execute(
+            select(Match.id, sides.c.side, Match.winner_side)
+            .join(sides, sides.c.match_id == Match.id)
+            .where(Match.winner_side.is_not(None))
+        )
+    }
+    faced: dict[int, list[Any]] = {}
+    for match_id, side, pid, name in db.execute(
+        select(MatchSide.match_id, MatchSide.side, Player.id, Player.display_name)
+        .join(MatchSidePlayer, MatchSidePlayer.match_side_id == MatchSide.id)
+        .join(PlayerLink, PlayerLink.source_player_id == MatchSidePlayer.source_player_id)
+        .join(Player, Player.id == PlayerLink.player_id)
+        .where(MatchSide.match_id.in_(list(mine)), Player.withheld_at.is_(None))
+    ):
+        my_side, won = mine[match_id]
+        if side != my_side:
+            row = faced.setdefault(pid, [name, 0, 0])
+            row[1 if won else 2] += 1
+    return {pid: (n, w, lo) for pid, (n, w, lo) in faced.items()}
+
+
+@router.get("/players/{a_id}/head-to-head/{b_id}", response_model=HeadToHead)
+def head_to_head(db: DB, a_id: int, b_id: int) -> HeadToHead | RedirectResponse:
+    """Every match where the two players stood on opposite sides, from A's side. Players are the
+    canonical (merged) records: no name matching, and a withheld player is not found."""
+    a, b = _canonical(db, a_id), _canonical(db, b_id)
+    if a.id == b.id:
+        raise HTTPException(422, "a player cannot be compared with themselves")
+    if (a.id, b.id) != (a_id, b_id):
+        return RedirectResponse(f"/v1/players/{a.id}/head-to-head/{b.id}", status_code=308)
+    sa, sb = _sides_of(a.id).subquery(), _sides_of(b.id).subquery()
+    against = exists().where(sb.c.match_id == sa.c.match_id, sb.c.side != sa.c.side)
+    matches, total = _match_items(db, a.id, sa, [against], None)
+    decided = [m for m in matches if m.result is not None]
+    per: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for m in decided:
+        per[m.discipline or "?"][0 if m.result == "won" else 1] += 1
+    days = [m.played_on for m in matches if m.played_on]
+    fa, fb = _faced(db, a.id), _faced(db, b.id)
+    common = sorted(
+        (
+            CommonOpponent(
+                id=pid,
+                name=fa[pid][0],
+                a_won=fa[pid][1],
+                a_lost=fa[pid][2],
+                b_won=fb[pid][1],
+                b_lost=fb[pid][2],
+            )
+            for pid in (fa.keys() & fb.keys()) - {a.id, b.id}
+        ),
+        key=lambda c: (-(c.a_won + c.a_lost + c.b_won + c.b_lost), c.name),
+    )[:10]
+    return HeadToHead(
+        a=PlayerRef(id=a.id, name=a.display_name),
+        b=PlayerRef(id=b.id, name=b.display_name),
+        meetings=total,
+        decided=len(decided),
+        a_won=sum(m.result == "won" for m in decided),
+        b_won=sum(m.result == "lost" for m in decided),
+        walkovers=sum(m.status == "walkover" for m in decided),
+        first_met=min(days, default=None),
+        last_met=max(days, default=None),
+        by_discipline=[
+            HeadToHeadDiscipline(discipline=d, a_won=w, b_won=lo)
+            for d, (w, lo) in sorted(per.items(), key=lambda kv: -sum(kv[1]))
+        ],
+        matches=matches,
+        common_opponents=common,
+    )
 
 
 @router.get("/tournaments/{tournament_id}")

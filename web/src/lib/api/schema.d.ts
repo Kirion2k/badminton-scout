@@ -84,6 +84,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/players/{a_id}/head-to-head/{b_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Head To Head
+     * @description Every match where the two players stood on opposite sides, from A's side. Players are the
+     *     canonical (merged) records: no name matching, and a withheld player is not found.
+     */
+    get: operations["head_to_head_v1_players__a_id__head_to_head__b_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/players/{player_id}": {
     parameters: {
       query?: never;
@@ -183,6 +204,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * CommonOpponent
+     * @description Someone both players have met in decided matches; each record from that player's side.
+     */
+    CommonOpponent: {
+      /** A Lost */
+      a_lost: number;
+      /** A Won */
+      a_won: number;
+      /** B Lost */
+      b_lost: number;
+      /** B Won */
+      b_won: number;
+      /** Id */
+      id: number;
+      /** Name */
+      name: string;
+      /**
+       * Withheld
+       * @default false
+       */
+      withheld: boolean;
+    };
     /** Coverage */
     Coverage: {
       /** Awaiting Import */
@@ -224,10 +268,62 @@ export interface components {
       /** Winner */
       winner?: components["schemas"]["PlayerRef"][] | null;
     };
+    /** FormatRecord */
+    FormatRecord: {
+      /**
+       * Format
+       * @enum {string}
+       */
+      format: "singles" | "doubles";
+      /** Lost */
+      lost: number;
+      /** Won */
+      won: number;
+    };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /**
+     * HeadToHead
+     * @description Matches where the two players were on opposite sides, from player A's side.
+     *
+     *     Meetings count every stored match between them; wins count decided matches only (a walkover,
+     *     retirement, disqualification or winner-only result counts, a match not played does not).
+     */
+    HeadToHead: {
+      a: components["schemas"]["PlayerRef"];
+      /** A Won */
+      a_won: number;
+      b: components["schemas"]["PlayerRef"];
+      /** B Won */
+      b_won: number;
+      /** By Discipline */
+      by_discipline: components["schemas"]["HeadToHeadDiscipline"][];
+      /** Common Opponents */
+      common_opponents: components["schemas"]["CommonOpponent"][];
+      /** Decided */
+      decided: number;
+      /** First Met */
+      first_met: string | null;
+      /** Last Met */
+      last_met: string | null;
+      /** Matches */
+      matches: components["schemas"]["PlayerMatch"][];
+      /** Meetings */
+      meetings: number;
+      /** Walkovers */
+      walkovers: number;
+    };
+    /** HeadToHeadDiscipline */
+    HeadToHeadDiscipline: {
+      /** A Won */
+      a_won: number;
+      /** B Won */
+      b_won: number;
+      /** Discipline */
+      discipline: string;
     };
     /** Health */
     Health: {
@@ -278,6 +374,20 @@ export interface components {
        * @default false
        */
       withheld: boolean;
+      /** Won */
+      won: number;
+    };
+    /**
+     * PeriodRecord
+     * @description Decided matches played on or after `since` (a calendar window ending today).
+     */
+    PeriodRecord: {
+      /** Label */
+      label: string;
+      /** Lost */
+      lost: number;
+      /** Since */
+      since: string | null;
       /** Won */
       won: number;
     };
@@ -332,6 +442,8 @@ export interface components {
     PlayerProfile: {
       /** By Discipline */
       by_discipline: components["schemas"]["DisciplineRecord"][];
+      /** By Format */
+      by_format: components["schemas"]["FormatRecord"][];
       /** Data Retrieved At */
       data_retrieved_at: string | null;
       /** Disciplines */
@@ -346,6 +458,8 @@ export interface components {
       name: string;
       /** Opponents */
       opponents: components["schemas"]["OpponentRecord"][];
+      /** Periods */
+      periods: components["schemas"]["PeriodRecord"][];
       record: components["schemas"]["Record"];
       /** Sources */
       sources: string[];
@@ -661,6 +775,38 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PlayerHit"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  head_to_head_v1_players__a_id__head_to_head__b_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        a_id: number;
+        b_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HeadToHead"];
         };
       };
       /** @description Validation Error */

@@ -1,6 +1,43 @@
 {
   "components": {
     "schemas": {
+      "CommonOpponent": {
+        "description": "Someone both players have met in decided matches; each record from that player's side.",
+        "properties": {
+          "a_lost": {
+            "title": "A Lost",
+            "type": "integer"
+          },
+          "a_won": {
+            "title": "A Won",
+            "type": "integer"
+          },
+          "b_lost": {
+            "title": "B Lost",
+            "type": "integer"
+          },
+          "b_won": {
+            "title": "B Won",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "withheld": {
+            "default": false,
+            "title": "Withheld",
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "name", "a_won", "a_lost", "b_won", "b_lost"],
+        "title": "CommonOpponent",
+        "type": "object"
+      },
       "Coverage": {
         "properties": {
           "awaiting_import": {
@@ -143,6 +180,26 @@
         "title": "EventSummary",
         "type": "object"
       },
+      "FormatRecord": {
+        "properties": {
+          "format": {
+            "enum": ["singles", "doubles"],
+            "title": "Format",
+            "type": "string"
+          },
+          "lost": {
+            "title": "Lost",
+            "type": "integer"
+          },
+          "won": {
+            "title": "Won",
+            "type": "integer"
+          }
+        },
+        "required": ["format", "won", "lost"],
+        "title": "FormatRecord",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -154,6 +211,117 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HeadToHead": {
+        "description": "Matches where the two players were on opposite sides, from player A's side.\n\nMeetings count every stored match between them; wins count decided matches only (a walkover,\nretirement, disqualification or winner-only result counts, a match not played does not).",
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/PlayerRef"
+          },
+          "a_won": {
+            "title": "A Won",
+            "type": "integer"
+          },
+          "b": {
+            "$ref": "#/components/schemas/PlayerRef"
+          },
+          "b_won": {
+            "title": "B Won",
+            "type": "integer"
+          },
+          "by_discipline": {
+            "items": {
+              "$ref": "#/components/schemas/HeadToHeadDiscipline"
+            },
+            "title": "By Discipline",
+            "type": "array"
+          },
+          "common_opponents": {
+            "items": {
+              "$ref": "#/components/schemas/CommonOpponent"
+            },
+            "title": "Common Opponents",
+            "type": "array"
+          },
+          "decided": {
+            "title": "Decided",
+            "type": "integer"
+          },
+          "first_met": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Met"
+          },
+          "last_met": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Met"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/PlayerMatch"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "meetings": {
+            "title": "Meetings",
+            "type": "integer"
+          },
+          "walkovers": {
+            "title": "Walkovers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "a",
+          "b",
+          "meetings",
+          "decided",
+          "a_won",
+          "b_won",
+          "walkovers",
+          "first_met",
+          "last_met",
+          "by_discipline",
+          "matches",
+          "common_opponents"
+        ],
+        "title": "HeadToHead",
+        "type": "object"
+      },
+      "HeadToHeadDiscipline": {
+        "properties": {
+          "a_won": {
+            "title": "A Won",
+            "type": "integer"
+          },
+          "b_won": {
+            "title": "B Won",
+            "type": "integer"
+          },
+          "discipline": {
+            "title": "Discipline",
+            "type": "string"
+          }
+        },
+        "required": ["discipline", "a_won", "b_won"],
+        "title": "HeadToHeadDiscipline",
         "type": "object"
       },
       "Health": {
@@ -250,6 +418,38 @@
         },
         "required": ["id", "name", "played", "won", "lost"],
         "title": "OpponentRecord",
+        "type": "object"
+      },
+      "PeriodRecord": {
+        "description": "Decided matches played on or after `since` (a calendar window ending today).",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lost": {
+            "title": "Lost",
+            "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "won": {
+            "title": "Won",
+            "type": "integer"
+          }
+        },
+        "required": ["label", "since", "won", "lost"],
+        "title": "PeriodRecord",
         "type": "object"
       },
       "PlayerHit": {
@@ -419,6 +619,13 @@
             "title": "By Discipline",
             "type": "array"
           },
+          "by_format": {
+            "items": {
+              "$ref": "#/components/schemas/FormatRecord"
+            },
+            "title": "By Format",
+            "type": "array"
+          },
           "data_retrieved_at": {
             "anyOf": [
               {
@@ -477,6 +684,13 @@
             "title": "Opponents",
             "type": "array"
           },
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/PeriodRecord"
+            },
+            "title": "Periods",
+            "type": "array"
+          },
           "record": {
             "$ref": "#/components/schemas/Record"
           },
@@ -508,6 +722,8 @@
           "id",
           "name",
           "record",
+          "periods",
+          "by_format",
           "by_discipline",
           "tournaments",
           "tournament_history",
@@ -1321,6 +1537,56 @@
           }
         },
         "summary": "Search Players",
+        "tags": ["players"]
+      }
+    },
+    "/v1/players/{a_id}/head-to-head/{b_id}": {
+      "get": {
+        "description": "Every match where the two players stood on opposite sides, from A's side. Players are the\ncanonical (merged) records: no name matching, and a withheld player is not found.",
+        "operationId": "head_to_head_v1_players__a_id__head_to_head__b_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "a_id",
+            "required": true,
+            "schema": {
+              "title": "A Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "b_id",
+            "required": true,
+            "schema": {
+              "title": "B Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadToHead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Head To Head",
         "tags": ["players"]
       }
     },
