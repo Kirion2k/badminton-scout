@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from scout.budget import BudgetExhausted
 from scout.ingest.operations import OPERATIONS
-from scout.ingest.provider import ApiAnythingProvider, ProviderError
+from scout.ingest.provider import ApiAnythingProvider, OperationFailed, ProviderError
 from scout.ingest.runner import (
     CookieWall,
     Portal,
@@ -245,7 +245,13 @@ def _search(
     # www pages are cumulative (page N lists the first 20*N); a federation portal rejects a page
     # past its results (class "input", seen 2026-11-14), so it reads page 1 and splits instead
     pages = BACKFILL_PAGES if portal.source_id == "tournamentsoftware" else 1
-    found = discover(session, provider, portal, pages=pages, window=(start, end))
+    try:
+        found = discover(session, provider, portal, pages=pages, window=(start, end))
+    except OperationFailed as e:
+        if not (e.klass == "input" and "no results" in e.reason):
+            raise
+        # a week with no tournaments (the holiday break) is an empty answer, not a failure
+        found = Counter({"listed": 0})
     counts = Counter({f"backfill:{k}": v for k, v in found.items()})
     counts["backfill:searches"] += 1
     if found["listed"] >= 20 * pages and end > start:

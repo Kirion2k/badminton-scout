@@ -65,6 +65,7 @@ class Portal:
         self.calls: list[str] = []
         self.search_fails = False
         self.searches: list[tuple[str, str]] = []  # www search windows asked for
+        self.empty_is_input = False  # answer an empty search as the real runtime does
 
     def call(
         self,
@@ -80,6 +81,8 @@ class Portal:
             self.searches.append((args["start"][:10], args["end"][:10]))
             lo, hi = args["start"][:10], args["end"][:10]
             hits = [i for i in self.listing if lo <= i["dates"][0][:10] <= hi]
+            if not hits and self.empty_is_input:
+                return api_anything.Result[Any](failed("input", reason="no results for these args"))
             return api_anything.Result[Any](ok(hits[: 20 * int(args["page"])]))
         if op == "tournamentSearch":
             answer = failed("drift") if self.search_fails else ok(self.listing)
@@ -461,3 +464,20 @@ def test_a_portal_reads_page_one_and_splits_a_full_window(
     run = sync(engine, session, portal, on=BA)
     assert run.counts["backfill:searches"] > 1  # 20 on page one: the window was split
     assert session.scalar(select(func.count()).select_from(TournamentDiscovery)) == 25
+
+
+def test_an_empty_window_does_not_stop_the_history_search(
+    engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sync_module, "has_history_search", has_history_search)
+    monkeypatch.setattr(sync_module, "BACKFILL_SEARCHES", 3)
+    old = TODAY - timedelta(days=30 + 2 * 28 + 5)  # only the third window has a tournament
+    portal = Portal()
+    portal.listing = [listed_on(OTHER, old)]
+    portal.days[OTHER] = {}
+    portal.empty_is_input = True  # the runtime's answer to a search with no results
+    run = sync(engine, session, portal, on=BA)
+    assert (
+        run.counts["backfill:searches"] == 3 and "backfill:failed:OperationFailed" not in run.counts
+    )
+    assert session.get(TournamentDiscovery, OTHER) is not None
