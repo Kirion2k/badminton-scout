@@ -685,6 +685,11 @@ def _ratings(args: argparse.Namespace) -> int:
             ll = t.get("log_loss", {})
             print(f"{key}: run {m['run_id']}, test {t['predicted']}/{t['matches']} predicted, "
                   f"log loss {ll.get('mean', float('nan')):.4f}")  # fmt: skip
+    elif args.action == "calibrate":
+        result = commands.calibrate(engine, args.run, args.out)
+        print(
+            f"selected: {result['selected']}; {result['final'][result['selected']]['parameters']}"
+        )
     else:
         commands.audit(engine, {"bwf": args.bwf, "fed": args.fed}, args.out)
         print(f"audit written to {args.out}")
@@ -881,6 +886,9 @@ def main(argv: list[str] | None = None) -> None:
     ev.add_argument("family", choices=["bwf", "fed"])
     ev.add_argument("selection", type=Path)
     ev.add_argument("--out", type=Path, required=True)
+    cb = ratings_actions.add_parser("calibrate", help="fit calibrators on 2012-2024 (ADR-0013)")
+    cb.add_argument("run", type=int, help="a stored BWF singles run of the frozen configuration")
+    cb.add_argument("--out", type=Path, required=True)
     au = ratings_actions.add_parser("audit", help="identity, duplicates and connectivity counts")
     au.add_argument("--bwf", type=int, required=True, help="BWF snapshot id")
     au.add_argument("--fed", type=int, required=True, help="federation snapshot id")

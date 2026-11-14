@@ -110,3 +110,41 @@ def audit(engine: Engine, snapshots: dict[str, int], out: Path) -> dict[str, Any
     }  # fmt: skip
     out.write_text(json.dumps(result, indent=1, default=str))
     return result
+
+
+def calibrate(engine: Engine, run_id: int, out: Path) -> dict[str, Any]:
+    """ADR-0013: fold comparison and the final fit on 2012-2024, then a diagnostic-only view of
+    the previously examined 2025-2026 period (never used to choose or fit anything)."""
+    from dataclasses import asdict
+
+    from scout.ratings import calibrate as cal
+
+    forecasts = cal.load(engine, run_id)
+    dev = cal.development(forecasts)
+    fold_result = cal.folds(dev)
+    chosen = cal.select(fold_result)
+    final = {kind: cal.fit(kind, dev) for kind in cal.CANDIDATES}
+    examined = [f for f in forecasts if f.day > cal.DEV_END]
+    result: dict[str, Any] = {
+        "run_id": run_id,
+        "development": {"from": str(cal.DEV_START), "to": str(cal.DEV_END), "n": len(dev)},
+        "folds": fold_result,
+        "selected": chosen,
+        "final": {
+            kind: {
+                "parameters": asdict(c),
+                "calibration_hash": cal.calibration_hash(c),
+                "development": {g: cal.summary(c, fs) for g, fs in cal.groups(dev).items()},
+            }
+            for kind, c in final.items()
+        },
+        "previously_examined_diagnostic_only": {
+            "note": "2025-01-01 to 2026-07-05 was read twice in M8 (ADR-0013): not evidence",
+            "by_candidate": {
+                kind: {g: cal.summary(c, fs) for g, fs in cal.groups(examined).items()}
+                for kind, c in final.items()
+            },
+        },
+    }
+    out.write_text(json.dumps(result, indent=1, default=str))
+    return result
