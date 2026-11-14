@@ -771,7 +771,7 @@ def head_to_head(db: DB, a_id: int, b_id: int) -> HeadToHead | RedirectResponse:
     decided = [m for m in matches if m.result is not None]
     per: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     for m in decided:
-        per[m.discipline or "?"][0 if m.result == "won" else 1] += 1
+        per[m.discipline or "unclassified"][0 if m.result == "won" else 1] += 1
     days = [m.played_on for m in matches if m.played_on]
     fa, fb = _faced(db, a.id), _faced(db, b.id)
     common = sorted(

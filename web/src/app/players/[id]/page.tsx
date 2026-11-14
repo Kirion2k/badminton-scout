@@ -364,6 +364,11 @@ function Opponents({ profile }: { profile: PlayerProfile }) {
 function WinRate({ profile }: { profile: PlayerProfile }) {
   const pct = (w: number, l: number) =>
     w + l ? `${Math.round((w / (w + l)) * 100)}%` : "–";
+  // matches in events we cannot classify still count in the record: shown, never dropped
+  const otherWon =
+    profile.record.won - profile.by_format.reduce((n, f) => n + f.won, 0);
+  const otherLost =
+    profile.record.lost - profile.by_format.reduce((n, f) => n + f.lost, 0);
   const rows: [string, number, number][] = [
     ...profile.periods.map(
       (p) => [p.label, p.won, p.lost] as [string, number, number],
@@ -376,6 +381,15 @@ function WinRate({ profile }: { profile: PlayerProfile }) {
           number,
         ],
     ),
+    ...(otherWon + otherLost > 0
+      ? [
+          ["Event not classified", otherWon, otherLost] as [
+            string,
+            number,
+            number,
+          ],
+        ]
+      : []),
   ];
   return (
     <Section id="win-rate" title="Win rate">
@@ -409,7 +423,8 @@ function WinRate({ profile }: { profile: PlayerProfile }) {
       </table>
       <p className="pt-2 text-[12px] text-subtle">
         Periods end today. Decided matches only: a walkover counts, a match not
-        played does not. Singles is MS and WS; doubles is MD, WD and XD.
+        played does not. Singles is MS and WS; doubles is MD, WD and XD. “Event
+        not classified” holds events whose name shows no discipline we can read.
       </p>
     </Section>
   );

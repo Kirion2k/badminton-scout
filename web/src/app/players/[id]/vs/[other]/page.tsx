@@ -96,7 +96,7 @@ async function Compare({
                         scope="row"
                         className="border-b border-border py-2 text-left font-normal"
                       >
-                        {DISCIPLINES[d.discipline] ?? d.discipline}
+                        {DISCIPLINES[d.discipline] ?? "Event not classified"}
                       </th>
                       <td className="num border-b border-border py-2 text-right">
                         {d.a_won}–{d.b_won}
@@ -122,10 +122,16 @@ async function Compare({
                     <th scope="col" className="pb-1 text-left font-normal">
                       Opponent
                     </th>
-                    <th scope="col" className="pb-1 text-right font-normal">
+                    <th
+                      scope="col"
+                      className="pb-1 pl-4 text-right font-normal"
+                    >
                       {abbr(h.a.name)}
                     </th>
-                    <th scope="col" className="pb-1 text-right font-normal">
+                    <th
+                      scope="col"
+                      className="pb-1 pl-4 text-right font-normal"
+                    >
                       {abbr(h.b.name)}
                     </th>
                   </tr>
@@ -144,10 +150,10 @@ async function Compare({
                           {o.name}
                         </Link>
                       </th>
-                      <td className="num border-b border-border py-2 text-right">
+                      <td className="num border-b border-border py-2 pl-4 text-right">
                         {o.a_won}–{o.a_lost}
                       </td>
-                      <td className="num border-b border-border py-2 text-right">
+                      <td className="num border-b border-border py-2 pl-4 text-right">
                         {o.b_won}–{o.b_lost}
                       </td>
                     </tr>
