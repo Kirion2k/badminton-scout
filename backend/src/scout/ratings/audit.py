@@ -9,13 +9,16 @@ results change without them.
 import re
 import unicodedata
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import Any
 
 from sqlalchemy import Connection, text
 
+from scout.analytics.graph import UnionFind
 from scout.analytics.ordering import round_rank
-from scout.ratings.dataset import BWF_SOURCE
+from scout.ratings.dataset import BWF_SOURCE, Row
 
 _QUAL_UNKNOWN, _GROUP = round_rank("Q"), round_rank("Group A")
 
@@ -120,3 +123,45 @@ def cross_source_duplicates(conn: Connection, window_days: int = 1) -> dict[str,
         if any(abs(d - day) <= window for d in bwf.get((disc, pair), ()))
     )  # fmt: skip
     return {"ts_singles_in_bwf_span": len(ts), "also_in_bwf": found}
+
+
+def connectivity(rows: Iterable[Row], source_of: dict[int, str]) -> dict[str, dict[str, Any]]:
+    """Per pool: who can be compared with whom through played matches. `source_of` maps a
+    tournament id to its source; a player's home is the source where they played most."""
+    by_pool: defaultdict[str, list[Row]] = defaultdict(list)
+    for r in rows:
+        by_pool[r.pool].append(r)
+    out: dict[str, dict[str, Any]] = {}
+    for pool, prs in sorted(by_pool.items()):
+        uf = UnionFind()
+        played: Counter[int] = Counter()
+        homes: defaultdict[int, Counter[str]] = defaultdict(Counter)
+        for r in prs:
+            uf.union(r.a, r.b)
+            for p in (r.a, r.b):
+                played[p] += 1
+                homes[p][source_of[r.cluster]] += 1
+        home = {p: c.most_common(1)[0][0] for p, c in homes.items()}
+        sizes = Counter(uf.find(p) for p in played)
+        ranked = sorted(sizes.values(), reverse=True)
+        n = len(played)
+        largest_root = max(sizes, key=lambda root: sizes[root])
+        in_largest = [p for p in played if uf.find(p) == largest_root]
+        cross = sum(1 for r in prs if home[r.a] != home[r.b])
+        # what share of all player pairs could be compared at all (same component)
+        pairs = sum(s * (s - 1) for s in ranked) / (n * (n - 1)) if n > 1 else 0.0
+        out[pool] = {
+            "players": n,
+            "matches": len(prs),
+            "components": len(ranked),
+            "largest": ranked[:5],
+            "share_in_largest": len(in_largest) / n if n else 0.0,
+            "comparable_pair_share": pairs,
+            "players_with_one_match": sum(1 for c in played.values() if c == 1),
+            "players_with_10_plus": sum(1 for c in played.values() if c >= 10),
+            "cross_home_matches": cross,
+            "largest_by_home": dict(Counter(home[p] for p in in_largest).most_common()),
+            "homes_reaching_largest": sorted({home[p] for p in in_largest}),
+            "homes": dict(Counter(home.values()).most_common()),
+        }
+    return out

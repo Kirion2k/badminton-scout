@@ -282,3 +282,42 @@ def test_union_find_and_components() -> None:
     uf.union(2, 3)
     assert uf.connected(1, 4)
     assert components([(1, 2), (2, 3), (7, 8)]) == [3, 2]
+
+
+def test_doubles_models_learn_and_never_see_their_own_result() -> None:
+    from scout.analytics.doubles import (
+        DoublesScored,
+        PairElo,
+        TeamElo,
+        TrueSkill,
+        replay_doubles,
+    )
+
+    ts = TrueSkill()
+    assert ts.predict((1, 2), (3, 4)) == pytest.approx(0.5)
+    ts.observe([((1, 2), (3, 4), True)])
+    assert ts.predict((1, 2), (3, 4)) > 0.5
+    assert ts.var[1] < (25 / 3) ** 2  # a result makes the estimate more certain
+    assert ts.mu[1] == pytest.approx(ts.mu[2]) and ts.mu[3] < 25 < ts.mu[1]
+
+    te = TeamElo(k=32)
+    te.observe([((1, 2), (3, 4), True)])
+    assert te.rating[1] == te.rating[2] == pytest.approx(1516)
+    assert te.predict((1, 3), (2, 4)) == pytest.approx(0.5)  # new pairs, same players
+
+    pe = PairElo(k=32)
+    pe.observe([((1, 2), (3, 4), True)])
+    assert pe.predict((1, 3), (2, 4)) == 0.5  # a new partnership knows nothing
+
+    rng = random.Random(5)
+    stream = [
+        DoublesScored(i, DAY + timedelta(days=i // 4), round_rank("R16"), i // 20,
+                      (2 * (i % 5), 2 * (i % 5) + 1), (10 + i % 3, 20 + i % 3), rng.random() < 0.6)
+        for i in range(400)
+    ]  # fmt: skip
+    for model in (PairElo, TeamElo, TrueSkill):
+        base = {p.match_id: p.p for p in replay_doubles(model(), stream)}
+        target = stream[200]
+        flipped = [replace(s, a_won=not s.a_won) if s is target else s for s in stream]
+        after = {p.match_id: p.p for p in replay_doubles(model(), flipped)}
+        assert all(base[s.match_id] == after[s.match_id] for s in stream if s.day <= target.day)

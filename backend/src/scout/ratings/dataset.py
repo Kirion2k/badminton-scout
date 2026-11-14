@@ -6,7 +6,6 @@ the moment, so a run can be replayed exactly and compared with a later snapshot.
 """
 
 import hashlib
-import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -19,27 +18,9 @@ from scout.analytics.ordering import round_rank
 from scout.models import RatingSnapshot, RatingSnapshotMatch
 from scout.sources import Use, require_permitted
 
-QUERY_VERSION = 1
+QUERY_VERSION = 2  # 2: federation categories from event.category
 BWF_SOURCE = "bwf_historical_compilation"
 FAMILIES = ("bwf", "fed")
-
-# A pool category from the event name. Juniors and para athletes are rated in their own pools or
-# not at all: they are not competitively comparable with the open draw.
-_PARA = re.compile(
-    r"\b(para|wh\s?[12]|sl\s?[34]|su\s?5|sh\s?6|ss\s?6|wheelchair|rolstoel|rollstuhl)\b", re.I
-)
-_JUNIOR = re.compile(
-    r"\b(u\s?\d{1,2}|o?\d{1,2}\s?u|under\s?\d{1,2}|boys?|girls?|juniors?|jeugd|jugend|youth|"
-    r"minimes?|benjamins?|cadets?|poussins?|pupilles?|mini)\b",
-    re.I,
-)
-
-
-def category(event_name: str) -> str:
-    """ "para", "junior" or "adult". Masters ("O35", "35+") are adult."""
-    if _PARA.search(event_name):
-        return "para"
-    return "junior" if _JUNIOR.search(event_name) else "adult"
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +33,7 @@ class Candidate:
     winner_side: int | None
     discipline: str | None
     event_name: str
+    category: str | None  # event.category: adult, junior, para (ingest/event_codes.py)
     tournament_id: int
     side1: tuple[int, ...]  # canonical player ids
     side2: tuple[int, ...]
@@ -82,10 +64,11 @@ def classify(family: str, c: Candidate, *, include_retired: bool = False) -> tup
         return None, "doubles"
     pool = f"{family}:{c.discipline}"
     if family == "fed":
-        kind = category(c.event_name)
-        if kind == "para":
+        if c.category is None:
+            return None, "uncategorised_event"
+        if c.category == "para":
             return None, "para_event"
-        if kind == "junior":
+        if c.category == "junior":
             pool += ":junior"
     if c.status != "completed" and not (include_retired and c.status == "retired"):
         return None, f"status_{c.status}"
@@ -130,7 +113,7 @@ def candidates(conn: Connection, family: str) -> Iterable[Candidate]:
     rows = conn.execute(
         text(
             """select m.id, m.normalized_from_revision_id, m.played_on, m.round, m.status,
-                      m.winner_side, e.discipline, e.name, t.id,
+                      m.winner_side, e.discipline, e.name, e.category, t.id,
                       array_agg(msp.source_player_id order by msp.position)
                         filter (where ms.side = 1),
                       array_agg(msp.source_player_id order by msp.position)
@@ -146,13 +129,13 @@ def candidates(conn: Connection, family: str) -> Iterable[Candidate]:
         ),
         {"sources": sources},
     )
-    for mid, rev, day, rnd, status, winner, disc, ename, tid, s1, s2 in rows:
+    for mid, rev, day, rnd, status, winner, disc, ename, cat, tid, s1, s2 in rows:
         ids1: list[int] = s1 or []
         ids2: list[int] = s2 or []
         side1 = tuple(canonical[p] for p in ids1)
         side2 = tuple(canonical[p] for p in ids2)
         yield Candidate(
-            mid, rev, day, rnd, status, winner, disc, ename, tid, side1, side2,
+            mid, rev, day, rnd, status, winner, disc, ename, cat, tid, side1, side2,
             withheld=any(p in withheld for p in side1 + side2),
         )  # fmt: skip
 
@@ -219,3 +202,49 @@ def load(session: Session, snapshot_id: int, pool: str) -> list[Row]:
         .order_by(m.day, m.rank.is_(None), m.rank, m.cluster, m.match_id)
     )
     return [Row(*r) for r in found]
+
+
+@dataclass(frozen=True, slots=True)
+class DoublesRow:
+    match_id: int
+    pool: str
+    day: date
+    rank: int | None
+    cluster: int
+    a: tuple[int, int]
+    b: tuple[int, int]
+    a_won: bool
+
+
+def build_doubles(conn: Connection, family: str) -> tuple[list[DoublesRow], Counter[str]]:
+    """Eligible doubles for offline research (never published): the singles rules, two players
+    a side, four different people."""
+    rows: list[DoublesRow] = []
+    counts: Counter[str] = Counter()
+    for c in candidates(conn, family):
+        if c.discipline not in ("MD", "WD", "XD"):
+            continue
+        pool = f"{family}:{c.discipline}"
+        if family == "fed" and c.category != "adult":
+            counts[f"excluded:category_{c.category}"] += 1
+            continue
+        reason = (
+            f"status_{c.status}" if c.status != "completed"
+            else "no_winner" if c.winner_side not in (1, 2)
+            else "not_two_players_per_side" if len(c.side1) != 2 or len(c.side2) != 2
+            else "withheld_player" if c.withheld
+            else "repeated_player" if len({*c.side1, *c.side2}) != 4
+            else None
+        )  # fmt: skip
+        if reason:
+            counts[f"excluded:{reason}"] += 1
+            continue
+        counts[pool] += 1
+        a = (min(c.side1), max(c.side1))
+        b = (min(c.side2), max(c.side2))
+        rows.append(
+            DoublesRow(c.match_id, pool, c.day, round_rank(c.round), c.tournament_id, a, b,
+                       c.winner_side == 1)
+        )  # fmt: skip
+    rows.sort(key=lambda r: (r.day, r.rank is None, r.rank or 0, r.cluster, r.match_id))
+    return rows, counts
