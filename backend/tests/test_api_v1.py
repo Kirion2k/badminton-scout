@@ -491,3 +491,22 @@ async def test_profile_periods_and_formats_add_up(api: httpx.AsyncClient, data: 
     assert (all_time["won"], all_time["lost"]) == (body["record"]["won"], body["record"]["lost"])
     assert [f["format"] for f in body["by_format"]] == ["singles"]
     assert sum(f["won"] + f["lost"] for f in body["by_format"]) == body["record"]["played"]
+
+
+def test_period_windows_are_calendar_years() -> None:
+    from scout.api_v1 import years_before
+
+    assert years_before(date(2026, 11, 14), 3) == date(2023, 11, 14)
+    assert years_before(date(2028, 2, 29), 1) == date(2027, 2, 28)
+
+
+async def test_two_ids_of_one_person_compare_to_their_profile(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    kim = player_id(data, "Kim SAMPLE")
+    lee = data.get(Player, player_id(data, "Lee PLACEHOLDER"))
+    assert lee is not None
+    lee.merged_into_id = kim
+    data.flush()
+    r = await api.get(f"/v1/players/{lee.id}/head-to-head/{kim}")
+    assert r.status_code == 308 and r.headers["location"] == f"/v1/players/{kim}"

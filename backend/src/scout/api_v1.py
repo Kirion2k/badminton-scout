@@ -1,7 +1,7 @@
 """Read API over normalized data. Only redistributable events are ever visible (ADR-0009)."""
 
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -567,8 +567,8 @@ def player_profile(db: DB, player_id: int) -> PlayerProfile | RedirectResponse:
     )[:10]
     today = date.today()
     windows = [
-        ("Last 12 months", today - timedelta(days=365)),
-        ("Last 3 years", today - timedelta(days=3 * 365)),
+        ("Last 12 months", years_before(today, 1)),
+        ("Last 3 years", years_before(today, 3)),
         ("All time", None),
     ]
     periods = [
@@ -729,6 +729,14 @@ def _match_items(
     return items, total
 
 
+def years_before(day: date, years: int) -> date:
+    """The same calendar date `years` earlier; 29 February falls back to 28 February."""
+    try:
+        return day.replace(year=day.year - years)
+    except ValueError:
+        return day.replace(year=day.year - years, day=28)
+
+
 def _faced(db: Session, player_id: int) -> dict[int, tuple[str, int, int]]:
     """{opponent id: (name, won, lost)} over decided visible matches, from this player's side.
     Withheld opponents are left out; a doubles match counts once for each opponent faced."""
@@ -762,6 +770,8 @@ def head_to_head(db: DB, a_id: int, b_id: int) -> HeadToHead | RedirectResponse:
     canonical (merged) records: no name matching, and a withheld player is not found."""
     a, b = _canonical(db, a_id), _canonical(db, b_id)
     if a.id == b.id:
+        if (a_id, b_id) != (a.id, a.id):  # two ids merged into one person: their profile
+            return RedirectResponse(f"/v1/players/{a.id}", status_code=308)
         raise HTTPException(422, "a player cannot be compared with themselves")
     if (a.id, b.id) != (a_id, b_id):
         return RedirectResponse(f"/v1/players/{a.id}/head-to-head/{b.id}", status_code=308)

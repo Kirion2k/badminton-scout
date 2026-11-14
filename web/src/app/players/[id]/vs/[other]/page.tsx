@@ -89,6 +89,12 @@ async function Compare({
                 <caption className="sr-only">
                   Wins each, decided meetings, by discipline
                 </caption>
+                <thead className="sr-only">
+                  <tr>
+                    <th scope="col">Discipline</th>
+                    <th scope="col">Wins each</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {h.by_discipline.map((d) => (
                     <tr key={d.discipline}>

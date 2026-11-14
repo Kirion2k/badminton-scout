@@ -397,6 +397,13 @@ function WinRate({ profile }: { profile: PlayerProfile }) {
         <caption className="sr-only">
           Decided matches won and lost, by period and format
         </caption>
+        <thead className="sr-only">
+          <tr>
+            <th scope="col">Period or format</th>
+            <th scope="col">Won–lost</th>
+            <th scope="col">Win rate</th>
+          </tr>
+        </thead>
         <tbody>
           {rows.map(([label, w, l], i) => (
             <tr
