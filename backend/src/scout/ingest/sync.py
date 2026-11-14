@@ -16,6 +16,7 @@ from sqlalchemy import Engine, func, select, text, update
 from sqlalchemy.orm import Session
 
 from scout.budget import BudgetExhausted
+from scout.ingest.operations import OPERATIONS
 from scout.ingest.provider import ApiAnythingProvider, ProviderError
 from scout.ingest.runner import (
     CookieWall,
@@ -43,6 +44,8 @@ OWNER_CHECKS = 4_000  # the budget stops it first; at 6,000 a day the backlog cl
 # www search is global, so it finds tournaments owned by ba. as well (routed to the BA source).
 BACKFILL_FLOOR = date(2005, 1, 1)  # Tournament Software's results do not go back further
 BACKFILL_WINDOW = timedelta(days=7)
+# a national portal lists one federation, so a month rarely fills a search: four weeks a window
+PORTAL_BACKFILL_WINDOW = timedelta(days=28)
 BACKFILL_SEARCHES = 40  # windows per pass: about nine months of history a day
 BACKFILL_PAGES = 15  # up to 300 listings per search; a full answer is split, never cut off
 
@@ -183,7 +186,7 @@ def _pass(
         if counts["owners:stopped_budget_exhausted"]:
             counts["stopped:budget_exhausted"] += 1
             return counts
-    if portal.source_id == "tournamentsoftware":
+    if has_history_search(portal):
         counts += _backfill(session, provider, portal, run)
     left = max_tournaments
     # at most half the slots: corrections must not starve the backlog
@@ -201,6 +204,13 @@ def _pass(
     return counts
 
 
+def has_history_search(portal: Portal) -> bool:
+    """The global site and every portal whose own date search is an approved operation."""
+    return portal.source_id == "tournamentsoftware" or (
+        f"{portal.ops}.find_tournaments" in OPERATIONS
+    )
+
+
 def _backfill(
     session: Session, provider: ApiAnythingProvider, portal: Portal, run: SyncRun
 ) -> Counter[str]:
@@ -214,7 +224,10 @@ def _backfill(
         if cursor <= BACKFILL_FLOOR:
             counts["backfill:reached_floor"] = 1
             break
-        start = max(cursor - BACKFILL_WINDOW, BACKFILL_FLOOR)
+        window = (
+            BACKFILL_WINDOW if portal.source_id == "tournamentsoftware" else PORTAL_BACKFILL_WINDOW
+        )
+        start = max(cursor - window, BACKFILL_FLOOR)
         try:
             counts += _search(session, provider, portal, start, cursor)
         except ProviderError as e:

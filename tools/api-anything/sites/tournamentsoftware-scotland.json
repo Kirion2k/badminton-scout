@@ -234,6 +234,101 @@
       "readOnly": true,
       "minTier": 1,
       "learnedLoggedIn": false
+    },
+    {
+      "name": "findTournaments",
+      "description": "Tournaments on this portal between two dates, via the find page's own search request (the www findBadmintonTournaments op on this host; a federation portal lists only badminton, so no SportID). Verified 2026-11-14 on ba. (14 listings, 2025-03) and bnz. (20 listings, 2025-03/04).",
+      "request": {
+        "method": "POST",
+        "url": "https://badmintonscotland.tournamentsoftware.com/find/tournament/DoSearch",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Not-A.Brand\";v=\"99\", \"Google Chrome\";v=\"157\", \"Chromium\";v=\"157\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+          "x-requested-with": "XMLHttpRequest",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "referer": "https://badmintonscotland.tournamentsoftware.com/find"
+        },
+        "body": "Page=1&TournamentFilter.Q=&TournamentFilter.DateFilterType=0&TournamentFilter.StartDate=2025-08-10T00%3A00&TournamentFilter.EndDate=2025-11-14T00%3A00"
+      },
+      "slots": [
+        {
+          "param": "page",
+          "at": [
+            "form:Page"
+          ]
+        },
+        {
+          "param": "start",
+          "at": [
+            "form:TournamentFilter.StartDate"
+          ]
+        },
+        {
+          "param": "end",
+          "at": [
+            "form:TournamentFilter.EndDate"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://badmintonscotland.tournamentsoftware.com/find"
+      },
+      "match": {
+        "method": "POST",
+        "host": "badmintonscotland.tournamentsoftware.com",
+        "path": "/find/tournament/DoSearch"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "html": {
+          "items": ".media__content",
+          "fields": {
+            "name": ".media__title .nav-link__value",
+            "href": ".media__title a@href",
+            "subheading": ".media__subheading:not(.media__subheading--muted) .nav-link__value",
+            "dates": "all:time@datetime"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "page",
+          "type": "number",
+          "required": true,
+          "example": "1",
+          "min": 1,
+          "description": "1-based results page"
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "example": "2025-08-10T00:00",
+          "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}T00:00",
+          "description": "First day, YYYY-MM-DDT00:00"
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "required": true,
+          "example": "2025-11-14T00:00",
+          "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}T00:00",
+          "description": "Last day, YYYY-MM-DDT00:00"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false
     }
   ],
   "loginCookies": [

@@ -16,7 +16,8 @@ from scout.budget import MemoryBudget
 from scout.ingest import sync as sync_module
 from scout.ingest.provider import ApiAnythingProvider
 from scout.ingest.runner import PORTALS, CookieWall
-from scout.ingest.sync import provider_lock, refresh_due, sync_provider
+from scout.ingest.runner import Portal as PortalSpec
+from scout.ingest.sync import has_history_search, provider_lock, refresh_due, sync_provider
 from scout.models import Event, Game, RawRecordRevision, SyncRun, TournamentDiscovery
 from scout.sources import SourceRights, Use
 
@@ -30,6 +31,16 @@ GUID = TOURNAMENT.lower()
 OTHER = "dddddddd-0000-0000-0000-000000000000"
 TODAY = datetime.now(UTC).date()
 PAST = date(2026, 1, 5)  # long finished: queue work, never refreshed
+
+
+@pytest.fixture(autouse=True)
+def no_portal_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Portal history search off unless a test turns it on: the other tests count exact calls."""
+
+    def www_only(p: PortalSpec) -> bool:
+        return p.source_id == "tournamentsoftware"
+
+    monkeypatch.setattr(sync_module, "has_history_search", www_only)
 
 
 def ymd(d: date) -> str:
@@ -65,7 +76,7 @@ class Portal:
     ) -> Mapping[str, Any]:
         args = args or {}
         self.calls.append(op)
-        if op == "findBadmintonTournaments":
+        if op in ("findBadmintonTournaments", "findTournaments"):
             self.searches.append((args["start"][:10], args["end"][:10]))
             lo, hi = args["start"][:10], args["end"][:10]
             hits = [i for i in self.listing if lo <= i["dates"][0][:10] <= hi]
@@ -409,3 +420,29 @@ def test_owners_are_checked_before_searching_further_back(
     # daily discovery, then the owner check, then the history search
     assert portal.calls.index("ownerCheck") < searches[-1]
     assert len(searches) == 2
+
+
+def test_a_portal_with_its_own_date_search_backfills_its_history(
+    engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sync_module, "has_history_search", has_history_search)
+    monkeypatch.setattr(sync_module, "BACKFILL_SEARCHES", 2)
+    old = TODAY - timedelta(days=70)
+    portal = Portal()
+    portal.listing = [listed_on(OTHER, old)]  # beyond the recent tab, reachable only by date
+    portal.days[OTHER] = {ymd(old): [at(row(), OTHER)]}
+    run = sync(engine, session, portal, on=BA)
+    assert run.backfilled_to == TODAY - timedelta(days=30 + 2 * 28)  # four-week windows
+    found = queued(session, OTHER)
+    assert found.owner_host == BA.host  # a portal's own search lists its own tournaments
+    assert "findTournaments" in portal.calls
+
+
+def test_a_portal_without_an_approved_date_search_does_not_backfill(
+    engine: Engine, session: Session
+) -> None:
+    from scout.ingest.runner import PORTALS
+
+    obv = next(p for p in PORTALS.values() if p.key == "obv")
+    assert not has_history_search(obv)
+    assert has_history_search(BA)

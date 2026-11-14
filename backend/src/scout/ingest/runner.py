@@ -387,9 +387,19 @@ def discover(
     window: tuple[date, date] | None = None,
 ) -> Counter[str]:
     """One listing request (pages are cumulative: page N returns the first 20*N). www searches
-    `window` (default: the last 30 days and the next 14)."""
+    `window` (default: the last 30 days and the next 14); a national portal searches `window`
+    with its own date search, else lists its recent tournaments."""
     if portal.source_id != "tournamentsoftware":
-        found = provider.fetch(f"{portal.ops}.tournament_search", {"tab": "Recent", "page": pages})
+        if window:
+            start, end = window
+            found = provider.fetch(
+                f"{portal.ops}.find_tournaments",
+                {"page": pages, "start": f"{start:%Y-%m-%d}T00:00", "end": f"{end:%Y-%m-%d}T00:00"},
+            )
+        else:
+            found = provider.fetch(
+                f"{portal.ops}.tournament_search", {"tab": "Recent", "page": pages}
+            )
         owner: str | None = portal.host  # a national portal lists its own tournaments
     else:
         today = datetime.now(UTC).date()
