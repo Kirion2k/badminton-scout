@@ -165,3 +165,75 @@ def connectivity(rows: Iterable[Row], source_of: dict[int, str]) -> dict[str, di
             "homes": dict(Counter(home.values()).most_common()),
         }
     return out
+
+
+def gender_consistency(conn: Connection) -> dict[str, dict[str, int]]:
+    """Per source and doubles discipline: do the sides fit it? A player's gender is read from the
+    singles they play (MS or WS, never both). WD wants two women, MD two men, XD one of each.
+    A regression check for misread codes such as German GD (mixed) or MD (girls')."""
+    singles: defaultdict[int, set[str]] = defaultdict(set)
+    for player, disc in conn.execute(text(
+        """select pl.player_id, e.discipline from match m
+           join event e on e.id = m.event_id and e.discipline in ('MS', 'WS')
+           join match_side ms on ms.match_id = m.id
+           join match_side_player msp on msp.match_side_id = ms.id
+           join player_link pl on pl.source_player_id = msp.source_player_id
+           group by 1, 2"""
+    )):  # fmt: skip
+        singles[player].add("m" if disc == "MS" else "w")
+    sides: defaultdict[tuple[str, str, int], list[int]] = defaultdict(list)
+    for source, disc, side, player in conn.execute(text(
+        """select t.source_id, e.discipline, ms.id, pl.player_id from match m
+           join event e on e.id = m.event_id and e.discipline in ('MD', 'WD', 'XD')
+           join tournament t on t.id = e.tournament_id
+           join match_side ms on ms.match_id = m.id
+           join match_side_player msp on msp.match_side_id = ms.id
+           join player_link pl on pl.source_player_id = msp.source_player_id"""
+    )):  # fmt: skip
+        sides[(source, disc, side)].append(player)
+    want = {"MD": "mm", "WD": "ww", "XD": "mw"}
+    out: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    for (source, disc, _), players in sides.items():
+        known = [next(iter(singles[p])) for p in players if len(singles[p]) == 1]
+        key = f"{source} {disc}"
+        if len(known) < 2:
+            out[key]["unknown"] += 1
+        else:
+            out[key]["fits" if "".join(sorted(known)) == want[disc] else "contradicts"] += 1
+    return {k: dict(v) for k, v in sorted(out.items())}
+
+
+_SEED = re.compile(r"\[\d+(?:/\d+)?\]\s*$")
+
+
+def side_order(conn: Connection) -> dict[str, Any]:
+    """Federation singles: how often side 1 wins, by who carries a seed marker in the raw
+    listing ("Name [3/4]") and by stage. Evidence only: side order is not a model input until its
+    pre-match meaning is verified (ADR-0013)."""
+    rows = conn.execute(text(
+        """select rv.payload, m.winner_side, m.round from match m
+           join event e on e.id = m.event_id and e.discipline in ('MS', 'WS')
+           join tournament t on t.id = e.tournament_id and t.source_id like 'tournamentsoftware%'
+           join raw_record_revision rv on rv.id = m.normalized_from_revision_id
+           where m.status = 'completed' and m.winner_side in (1, 2)"""
+    ))  # fmt: skip
+    seeded: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    stage: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    for payload, winner, rnd in rows:
+        p: dict[str, Any] = payload or {}
+        s1 = any(_SEED.search(n) for n in p.get("side1Names", []))
+        s2 = any(_SEED.search(n) for n in p.get("side2Names", []))
+        key = {(True, False): "side 1 seeded", (False, True): "side 2 seeded",
+               (True, True): "both seeded", (False, False): "neither seeded"}[(s1, s2)]  # fmt: skip
+        rank = round_rank(rnd)
+        band = ("unlabelled" if rank is None else "group" if rank == _GROUP
+                else "qualification" if rank < 1000 else "knockout")  # fmt: skip
+        for table, k in ((seeded, key), (stage, band)):
+            table[k]["matches"] += 1
+            table[k]["side 1 won"] += winner == 1
+
+    def rate(t: dict[str, Counter[str]]) -> dict[str, dict[str, float]]:
+        return {k: {"matches": v["matches"], "side_1_win_rate": v["side 1 won"] / v["matches"]}
+                for k, v in sorted(t.items())}  # fmt: skip
+
+    return {"by_seed": rate(seeded), "by_stage": rate(stage)}

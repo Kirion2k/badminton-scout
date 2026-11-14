@@ -64,6 +64,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/matchups/compare": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Compare Matchup
+     * @description Mynton Matchup (ADR-0013). Probabilities and rating numbers are behind flags that are
+     *     off: until then this compares results only and says why no probability is given.
+     */
+    get: operations["compare_matchup_v1_matchups_compare_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/players": {
     parameters: {
       query?: never;
@@ -205,6 +226,23 @@ export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
     /**
+     * Calibration
+     * @description How such forecasts did in the held-out test period: the reliability bin this forecast
+     *     falls in, so the number comes with its track record.
+     */
+    Calibration: {
+      /** Bin Hi */
+      bin_hi: number;
+      /** Bin Lo */
+      bin_lo: number;
+      /** Forecasts */
+      forecasts: number;
+      /** Observed Rate */
+      observed_rate: number;
+      /** Test Log Loss */
+      test_log_loss: number;
+    };
+    /**
      * CommonOpponent
      * @description Someone both players have met in decided matches; each record from that player's side.
      */
@@ -269,6 +307,23 @@ export interface components {
       name: string;
       /** Winner */
       winner?: components["schemas"]["PlayerRef"][] | null;
+    };
+    /** Evidence */
+    Evidence: {
+      /** Last Played */
+      last_played: string | null;
+      /** Player Id */
+      player_id: number;
+      /** Pool */
+      pool: string;
+      /** Prior Matches */
+      prior_matches: number;
+      /** Provisional */
+      provisional: boolean;
+      /** Rating */
+      rating: number | null;
+      /** Rating Deviation */
+      rating_deviation: number | null;
     };
     /** FormatRecord */
     FormatRecord: {
@@ -360,6 +415,66 @@ export interface components {
       offset: number;
       /** Total */
       total: number;
+    };
+    /** Matchup */
+    Matchup: {
+      a: components["schemas"]["Evidence"] | null;
+      b: components["schemas"]["Evidence"] | null;
+      calibration?: components["schemas"]["Calibration"] | null;
+      /** Data As Of */
+      data_as_of?: string | null;
+      /**
+       * Discipline
+       * @default MS
+       * @enum {string}
+       */
+      discipline: "MS" | "WS";
+      /** Head To Head */
+      head_to_head?: [number, number] | null;
+      model?: components["schemas"]["ModelInfo"] | null;
+      /**
+       * Outcome
+       * @enum {string}
+       */
+      outcome:
+        | "probability"
+        | "comparison"
+        | "insufficient_data"
+        | "incompatible_pools"
+        | "identity_uncertain";
+      /** Probability A */
+      probability_a?: number | null;
+      /**
+       * Ratings Shown
+       * @default false
+       */
+      ratings_shown: boolean;
+      /**
+       * Reasons
+       * @default []
+       */
+      reasons: string[];
+    };
+    /** ModelInfo */
+    ModelInfo: {
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+      /**
+       * Data As Of
+       * Format: date
+       */
+      data_as_of: string;
+      /** Name */
+      name: string;
+      /** Run Id */
+      run_id: number;
+      /** Snapshot Id */
+      snapshot_id: number;
+      /** Version */
+      version: string;
     };
     /** OpponentRecord */
     OpponentRecord: {
@@ -754,6 +869,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Coverage"];
+        };
+      };
+    };
+  };
+  compare_matchup_v1_matchups_compare_get: {
+    parameters: {
+      query: {
+        a: number;
+        b: number;
+        discipline?: "MS" | "WS";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Matchup"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

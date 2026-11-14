@@ -62,6 +62,14 @@ async function Compare({
           </Link>
         </h1>
         <Summary h={h} />
+        <p className="mt-2 text-[14px]">
+          <Link
+            href={`/compare?a=${h.a.id}&b=${h.b.id}`}
+            className="text-form underline"
+          >
+            Singles matchup
+          </Link>
+        </p>
       </header>
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <Section

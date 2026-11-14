@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Table2, Trophy } from "lucide-react";
+import { Scale, Search, Table2, Trophy } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Players", icon: Search },
+  { href: "/compare", label: "Compare", icon: Scale },
   { href: "/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/coverage", label: "Sources", icon: Table2 },
 ];

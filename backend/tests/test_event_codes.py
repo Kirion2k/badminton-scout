@@ -111,3 +111,30 @@ def test_review_visibility_follows_the_corrected_reading(
     counts = reclassify(session, [t.id])
     assert (e.discipline, e.category, e.redistributable) == ("WD", "junior", False)
     assert counts["now private"] == 1
+
+
+def test_an_unmarked_event_in_a_mostly_junior_tournament_is_not_called_adult(
+    session: Session,
+) -> None:
+    t = Tournament(source_id="tournamentsoftware_ba", source_key="t-jr", name="Synthetic Juniors")
+    session.add(t)
+    session.flush()
+    for name in ("BS U13", "GS U13", "BD U15", "GD U15", "MS"):
+        session.add(Event(tournament_id=t.id, source_key=name, name=name))
+    session.flush()
+    reclassify(session, [t.id])
+    got = {e.name: (e.discipline, e.category) for e in session.scalars(
+        select(Event).where(Event.tournament_id == t.id))}  # fmt: skip
+    assert got["MS"] == ("MS", None)  # 4 of 5 junior: an unreadable age group, not an open draw
+    assert got["BS U13"] == ("MS", "junior")
+
+
+def test_an_event_without_a_discipline_has_no_category(session: Session) -> None:
+    t = Tournament(source_id="tournamentsoftware_bnz", source_key="t-box", name="Synthetic Box")
+    session.add(t)
+    session.flush()
+    session.add(Event(tournament_id=t.id, source_key="w4", name="Week 4 Singles - Group 6"))
+    session.flush()
+    reclassify(session, [t.id])
+    e = session.scalars(select(Event).where(Event.tournament_id == t.id)).one()
+    assert (e.discipline, e.category) == (None, None)

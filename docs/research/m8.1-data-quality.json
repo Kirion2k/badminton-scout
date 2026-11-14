@@ -1,0 +1,176 @@
+{
+ "gender_consistency": {
+  "bwf_historical_compilation MD": {
+   "unknown": 34545,
+   "fits": 4741
+  },
+  "bwf_historical_compilation WD": {
+   "unknown": 25650,
+   "fits": 7020
+  },
+  "bwf_historical_compilation XD": {
+   "unknown": 34877,
+   "fits": 3885
+  },
+  "tournamentsoftware MD": {
+   "fits": 8515,
+   "unknown": 12492,
+   "contradicts": 21
+  },
+  "tournamentsoftware WD": {
+   "fits": 3779,
+   "unknown": 4697,
+   "contradicts": 2
+  },
+  "tournamentsoftware XD": {
+   "fits": 3763,
+   "unknown": 6186,
+   "contradicts": 45
+  },
+  "tournamentsoftware_ba MD": {
+   "fits": 19422,
+   "unknown": 18105,
+   "contradicts": 29
+  },
+  "tournamentsoftware_ba WD": {
+   "fits": 8116,
+   "contradicts": 28,
+   "unknown": 8114
+  },
+  "tournamentsoftware_ba XD": {
+   "contradicts": 105,
+   "fits": 15528,
+   "unknown": 15063
+  },
+  "tournamentsoftware_badvla MD": {
+   "fits": 8529,
+   "unknown": 6467
+  },
+  "tournamentsoftware_badvla WD": {
+   "unknown": 4663,
+   "fits": 2763
+  },
+  "tournamentsoftware_badvla XD": {
+   "unknown": 8467,
+   "fits": 6777
+  },
+  "tournamentsoftware_bnz MD": {
+   "fits": 11703,
+   "unknown": 7826,
+   "contradicts": 7
+  },
+  "tournamentsoftware_bnz WD": {
+   "fits": 6737,
+   "unknown": 4969,
+   "contradicts": 2
+  },
+  "tournamentsoftware_bnz XD": {
+   "fits": 9421,
+   "unknown": 7548,
+   "contradicts": 17
+  },
+  "tournamentsoftware_canada MD": {
+   "fits": 1577,
+   "unknown": 507
+  },
+  "tournamentsoftware_canada WD": {
+   "fits": 822,
+   "unknown": 490
+  },
+  "tournamentsoftware_canada XD": {
+   "unknown": 1143,
+   "fits": 1219
+  },
+  "tournamentsoftware_cbbd MD": {
+   "fits": 2885,
+   "unknown": 255
+  },
+  "tournamentsoftware_cbbd WD": {
+   "fits": 1896,
+   "unknown": 154
+  },
+  "tournamentsoftware_cbbd XD": {
+   "fits": 2639,
+   "unknown": 329
+  },
+  "tournamentsoftware_dbv MD": {
+   "fits": 13263,
+   "unknown": 19286,
+   "contradicts": 19
+  },
+  "tournamentsoftware_dbv WD": {
+   "fits": 5976,
+   "unknown": 9518
+  },
+  "tournamentsoftware_dbv XD": {
+   "fits": 12414,
+   "unknown": 19418
+  },
+  "tournamentsoftware_england WD": {
+   "unknown": 367,
+   "fits": 19
+  },
+  "tournamentsoftware_england XD": {
+   "unknown": 720
+  },
+  "tournamentsoftware_obv MD": {
+   "unknown": 290,
+   "fits": 1788
+  },
+  "tournamentsoftware_obv WD": {
+   "fits": 656,
+   "unknown": 270
+  },
+  "tournamentsoftware_obv XD": {
+   "fits": 1349,
+   "unknown": 547
+  },
+  "tournamentsoftware_scotland MD": {
+   "fits": 1338,
+   "unknown": 1287,
+   "contradicts": 7
+  },
+  "tournamentsoftware_scotland WD": {
+   "fits": 662,
+   "unknown": 658
+  },
+  "tournamentsoftware_scotland XD": {
+   "unknown": 1295,
+   "fits": 1093
+  }
+ },
+ "side_order": {
+  "by_seed": {
+   "both seeded": {
+    "matches": 10520,
+    "side_1_win_rate": 0.5569391634980989
+   },
+   "neither seeded": {
+    "matches": 92180,
+    "side_1_win_rate": 0.5129637665437188
+   },
+   "side 1 seeded": {
+    "matches": 32309,
+    "side_1_win_rate": 0.7862824599956668
+   },
+   "side 2 seeded": {
+    "matches": 13025,
+    "side_1_win_rate": 0.2491362763915547
+   }
+  },
+  "by_stage": {
+   "knockout": {
+    "matches": 126075,
+    "side_1_win_rate": 0.5592782074162205
+   },
+   "qualification": {
+    "matches": 6259,
+    "side_1_win_rate": 0.5184534270650264
+   },
+   "unlabelled": {
+    "matches": 15700,
+    "side_1_win_rate": 0.5119108280254777
+   }
+  }
+ }
+}

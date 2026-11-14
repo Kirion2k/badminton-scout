@@ -171,3 +171,10 @@ def test_review_rating_history_is_kept_per_pool() -> None:
         n for (pool, q, _), (*_, n) in history.points.items() if pool == "fed:MS" and q == p
     )
     assert adult == sum(1 for r in data if p in (r.a, r.b))
+
+
+def test_seed_markers_are_read_from_the_raw_listing() -> None:
+    from scout.ratings.audit import _SEED  # pyright: ignore[reportPrivateUsage]
+
+    assert _SEED.search("Ann LEE [3/4]") and _SEED.search("Ann LEE [1]")
+    assert not _SEED.search("Ann LEE") and not _SEED.search("Ann [3] LEE")

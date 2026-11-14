@@ -18,6 +18,7 @@ export type TournamentMatchPage = Schemas["TournamentMatchPage"];
 export type TournamentMatch = Schemas["TournamentMatch"];
 export type Coverage = Schemas["Coverage"];
 export type HeadToHead = Schemas["HeadToHead"];
+export type Matchup = Schemas["Matchup"];
 
 export class ApiError extends Error {
   constructor(
@@ -58,6 +59,8 @@ async function get<T>(path: string, query?: Query): Promise<T> {
   if (response.status === 308) {
     const location = response.headers.get("location") ?? "";
     // a merged id: the comparison keeps its pair, a profile goes to the canonical player
+    const matchup = location.match(/\/v1\/matchups\/compare\?(.*)$/);
+    if (matchup) permanentRedirect(`/compare?${matchup[1]}`);
     const pair = location.match(/\/v1\/players\/(\d+)\/head-to-head\/(\d+)/);
     if (pair) permanentRedirect(`/players/${pair[1]}/vs/${pair[2]}`);
     const target = location.match(/\/v1\/players\/(\d+)/);
@@ -80,4 +83,6 @@ export const api = {
   coverage: () => get<Coverage>("/v1/coverage"),
   headToHead: (a: number, b: number) =>
     get<HeadToHead>(`/v1/players/${a}/head-to-head/${b}`),
+  matchup: (a: number, b: number, discipline: "MS" | "WS") =>
+    get<Matchup>("/v1/matchups/compare", { a, b, discipline }),
 };

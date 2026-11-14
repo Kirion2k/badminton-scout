@@ -146,6 +146,8 @@ def fits(discipline: str | None, players_per_side: set[int]) -> bool:
     return players_per_side == ({1} if discipline[1] == "S" else {2})
 
 
+JUNIOR_SHARE = 0.8  # a tournament this junior reads its unmarked events as unknown, not adult
+
 _NO_ENGLISH_FALLBACK = {
     "tournamentsoftware_dbv", "tournamentsoftware_obv", "tournamentsoftware_badvla",
     "tournamentsoftware_cbbd",
@@ -207,31 +209,51 @@ def reclassify(
     names: defaultdict[int, list[str]] = defaultdict(list)
     for e, _ in events:
         names[e.tournament_id].append(e.name)
+    read: dict[int, tuple[str | None, str]] = {}  # event -> (discipline, category)
     counts: Counter[str] = Counter()
     for e, source in events:
-        language = tournament_language(source, names[e.tournament_id])
-        c = discipline(source, e.name, language)
+        c = discipline(source, e.name, tournament_language(source, names[e.tournament_id]))
         new = c.discipline
         if not fits(new, shapes[e.id]):
             counts["shape_conflict_left_unclassified"] += 1
             new = None
+        read[e.id] = (new, c.category)
+    # "adult" only means "no junior or para marker seen", so it needs support: a recognised
+    # discipline, and a tournament that is not mostly junior (where an unmarked event is more
+    # likely an age group we cannot read than an open draw)
+    junior: Counter[int] = Counter()
+    known: Counter[int] = Counter()
+    for e, _ in events:
+        if read[e.id][0] is not None:
+            known[e.tournament_id] += 1
+            junior[e.tournament_id] += read[e.id][1] == "junior"
+    for e, source in events:
+        new, category = read[e.id]
+        mostly_junior = (
+            known[e.tournament_id]
+            and junior[e.tournament_id] >= JUNIOR_SHARE * known[e.tournament_id]
+        )
+        if category == "adult" and (new is None or mostly_junior):
+            category = None
         if new != e.discipline:
             counts[f"events {source} {e.discipline}->{new}"] += 1
             counts[f"matches {source} {e.discipline}->{new}"] += matches.get(e.id, 0)
             if not dry_run:
                 e.discipline = new
+        if category != e.category:
+            counts[f"category {source} {e.category}->{category}"] += matches.get(e.id, 0)
+            if not dry_run:
+                e.category = category
         # visibility follows the corrected reading (ADR-0009/0010), never the first one. The
         # privacy allowlist reads names in English ("MD" looks adult), so when restricted events
         # are hidden, the language-aware category must agree too (German "MD" is girls')
         served = is_redistributable_event(e.name, new) and (
-            scout.privacy.PUBLISH_RESTRICTED_EVENTS or c.category == "adult"
+            scout.privacy.PUBLISH_RESTRICTED_EVENTS or category == "adult"
         )
         if served != e.redistributable:
             counts["now served" if served else "now private"] += 1
             if not dry_run:
                 e.redistributable = served
-        if c.category != e.category and not dry_run:
-            e.category = c.category
     if not dry_run:
         session.flush()
     return counts
