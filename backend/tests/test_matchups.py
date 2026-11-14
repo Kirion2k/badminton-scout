@@ -1,14 +1,23 @@
 """The matchup contract (docs/specs/matchups.md): what may and may not carry a probability."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-import httpx
 import pytest
 from pydantic import ValidationError
 
-from scout.main import create_app
-from scout.matchups import Calibration, Evidence, Matchup, ModelInfo
+from scout import matchups
+from scout.matchups import (
+    Calibration,
+    Evidence,
+    Matchup,
+    ModelInfo,
+    Rated,
+    Served,
+    Standing,
+    decide,
+    probability,
+)
 
 
 def ev(pid: int, pool: str = "bwf:MS", n: int = 40) -> Evidence:
@@ -63,10 +72,102 @@ def test_outcomes_without_a_probability() -> None:
     assert cross.a and cross.b and cross.a.pool != cross.b.pool
 
 
-@pytest.mark.anyio
-async def test_the_matchup_route_is_not_published_yet() -> None:
-    app = create_app()
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as api:
-        assert (await api.get("/v1/matchups/compare", params={"a": 1, "b": 2})).status_code == 404
+D = date(2026, 7, 5)
+SERVED = Served(run_id=1, snapshot_id=1, version="abc", data_as_of=D,
+                computed_at=datetime(2026, 11, 15, tzinfo=UTC))  # fmt: skip
+EVIDENCE: dict[str, Any] = {
+    "log_loss": {"mean": 0.55, "lo": 0.53, "hi": 0.57},
+    "favourite_reliability": [
+        {"lo": i / 10, "hi": (i + 1) / 10, "n": 300, "observed": i / 10 + 0.05}
+        for i in range(5, 10)
+    ],
+}
+
+
+def st(
+    pid: int,
+    played: int = 40,
+    *,
+    rating: float = 1600.0,
+    comp: int = 0,
+    flagged: bool = False,
+    bwf: bool = True,
+    matches: int | None = None,
+) -> Standing:
+    rated = Rated(rating, 80.0, played, D, comp, flagged) if bwf else None
+    return Standing(pid, played if matches is None else matches, D, rated)  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "outcome"),
+    [
+        (st(1), st(2), "comparison"),  # flags off: never a number
+        (st(1), st(2, played=5), "comparison"),
+        (st(1), st(2, flagged=True), "identity_uncertain"),
+        (st(1), st(2, comp=3), "incompatible_pools"),
+        (st(1), st(2, bwf=False, matches=30), "incompatible_pools"),
+        (st(1, bwf=False, matches=30), st(2, bwf=False, matches=12), "comparison"),
+        (st(1), st(2, bwf=False, matches=0), "insufficient_data"),
+    ],
+)  # fmt: skip
+def test_outcomes_with_the_flags_off(a: Standing, b: Standing, outcome: str) -> None:
+    m = decide(a, b, "MS", SERVED)
+    assert m.outcome == outcome and m.probability_a is None and m.reasons
+    assert m.a and m.b and m.a.rating is None and m.b.rating is None and not m.ratings_shown
+
+
+def test_flags_on_without_release_evidence_still_gives_no_number() -> None:
+    m = decide(st(1), st(2), "MS", SERVED, public_probabilities=True, public_ratings=True)
+    assert m.outcome == "comparison" and m.probability_a is None
+    assert m.ratings_shown and m.a and m.a.rating == 1600.0  # ratings flag alone shows ratings
+
+
+def test_a_probability_needs_everything_and_is_symmetric() -> None:
+    kw: dict[str, Any] = {"public_probabilities": True, "release_evidence": EVIDENCE}
+    ab = decide(st(1, rating=1700), st(2, rating=1550), "MS", SERVED, **kw)
+    ba = decide(st(2, rating=1550), st(1, rating=1700), "MS", SERVED, **kw)
+    assert ab.outcome == ba.outcome == "probability"
+    assert ab.probability_a and ba.probability_a
+    assert ab.probability_a + ba.probability_a == pytest.approx(1, abs=2e-4)  # 4-place rounding
+    assert ab.probability_a > 0.5 and ab.model and ab.calibration
+    assert ab.calibration == ba.calibration  # the favourite's record, whoever is A
+    assert (
+        ab.calibration.bin_lo <= max(ab.probability_a, 1 - ab.probability_a) < ab.calibration.bin_hi
+    )
+    # every other condition still blocks it
+    assert decide(st(1), st(2, played=5), "MS", SERVED, **kw).outcome == "comparison"
+    assert decide(st(1), st(2, comp=1), "MS", SERVED, **kw).outcome == "incompatible_pools"
+    assert decide(st(1), st(2, flagged=True), "MS", SERVED, **kw).outcome == "identity_uncertain"
+    assert decide(st(1), st(2), "MS", None, **kw).outcome == "incompatible_pools"
+
+
+def test_unrated_players_never_carry_rating_fields_even_with_flags_on() -> None:
+    on: dict[str, Any] = {"public_probabilities": True, "public_ratings": True,
+                          "release_evidence": EVIDENCE}  # fmt: skip
+    m = decide(st(1, bwf=False, matches=30), st(2, bwf=False, matches=30), "MS", SERVED, **on)
+    assert m.outcome == "comparison" and m.a and m.a.pool == "unrated" and m.a.rating is None
+    assert m.data_as_of is None
+
+
+def test_the_shipped_flags_are_off() -> None:
+    assert matchups.PUBLIC_PROBABILITIES is False
+    assert matchups.PUBLIC_RATINGS is False
+    assert matchups.RELEASE_EVIDENCE is None
+
+
+def test_uncertainty_grows_with_time_since_the_ratings() -> None:
+    near = probability(Rated(1700, 60, 40, D, 0, False), Rated(1500, 60, 40, D, 0, False),
+                       SERVED, D)  # fmt: skip
+    later = probability(Rated(1700, 60, 40, D, 0, False), Rated(1500, 60, 40, D, 0, False),
+                        SERVED, D + timedelta(days=200))  # fmt: skip
+    assert 0.5 < later < near  # months without results: a less confident forecast
+    a, b = Rated(1700, 60, 40, D, 0, False), Rated(1500, 60, 40, D, 0, False)
+    on = D + timedelta(days=90)
+    assert probability(a, b, SERVED, on) + probability(b, a, SERVED, on) == pytest.approx(1)
+
+
+def test_a_forecast_outside_the_validated_range_gets_no_number() -> None:
+    narrow = {**EVIDENCE, "favourite_reliability": [EVIDENCE["favourite_reliability"][0]]}
+    m = decide(st(1, rating=2100), st(2, rating=1400), "MS", SERVED, public_probabilities=True,
+               release_evidence=narrow)  # fmt: skip
+    assert m.outcome == "comparison" and m.probability_a is None

@@ -18,6 +18,7 @@ export type TournamentMatchPage = Schemas["TournamentMatchPage"];
 export type TournamentMatch = Schemas["TournamentMatch"];
 export type Coverage = Schemas["Coverage"];
 export type HeadToHead = Schemas["HeadToHead"];
+export type Matchup = Schemas["Matchup"];
 
 export class ApiError extends Error {
   constructor(
@@ -58,6 +59,8 @@ async function get<T>(path: string, query?: Query): Promise<T> {
   if (response.status === 308) {
     const location = response.headers.get("location") ?? "";
     // a merged id: the comparison keeps its pair, a profile goes to the canonical player
+    const matchup = location.match(/\/v1\/matchups\/compare\?(.*)$/);
+    if (matchup) permanentRedirect(`/compare?${matchup[1]}`);
     const pair = location.match(/\/v1\/players\/(\d+)\/head-to-head\/(\d+)/);
     if (pair) permanentRedirect(`/players/${pair[1]}/vs/${pair[2]}`);
     const target = location.match(/\/v1\/players\/(\d+)/);
@@ -67,7 +70,31 @@ async function get<T>(path: string, query?: Query): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** The canonical id for a (possibly merged) player, without leaving the current page: a merged
+ * id answers 308 to its canonical profile. Unknown or withheld players are not found. */
+async function canonicalPlayer(id: number): Promise<number> {
+  let response: Response;
+  try {
+    response = await fetch(url(`/v1/players/${id}`), {
+      cache: "no-store",
+      redirect: "manual",
+    });
+  } catch {
+    throw new ApiError(503, `/v1/players/${id}`);
+  }
+  if (response.status === 404) notFound();
+  if (response.status === 308) {
+    const target = (response.headers.get("location") ?? "").match(
+      /\/v1\/players\/(\d+)/,
+    );
+    if (target) return Number(target[1]);
+  }
+  if (!response.ok) throw new ApiError(response.status, `/v1/players/${id}`);
+  return id;
+}
+
 export const api = {
+  canonicalPlayer,
   searchPlayers: (q: string, limit = 20) =>
     get<PlayerHit[]>("/v1/players", { q, limit }),
   profile: (id: number) => get<PlayerProfile>(`/v1/players/${id}`),
@@ -80,4 +107,6 @@ export const api = {
   coverage: () => get<Coverage>("/v1/coverage"),
   headToHead: (a: number, b: number) =>
     get<HeadToHead>(`/v1/players/${a}/head-to-head/${b}`),
+  matchup: (a: number, b: number, discipline: "MS" | "WS") =>
+    get<Matchup>("/v1/matchups/compare", { a, b, discipline }),
 };

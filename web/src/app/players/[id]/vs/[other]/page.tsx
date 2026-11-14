@@ -33,6 +33,12 @@ export default function HeadToHeadPage({
   );
 }
 
+/** The singles discipline these two have results in: women's when only WS appears. */
+function singles(h: HeadToHead): "MS" | "WS" {
+  const seen = new Set(h.by_discipline.map((x) => x.discipline));
+  return seen.has("WS") && !seen.has("MS") ? "WS" : "MS";
+}
+
 function id(raw: string): number {
   const n = Number(raw);
   if (!Number.isSafeInteger(n) || n < 1) notFound();
@@ -62,6 +68,14 @@ async function Compare({
           </Link>
         </h1>
         <Summary h={h} />
+        <p className="mt-2 text-[14px]">
+          <Link
+            href={`/compare?a=${h.a.id}&b=${h.b.id}&discipline=${singles(h)}`}
+            className="text-form underline"
+          >
+            Singles matchup
+          </Link>
+        </p>
       </header>
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <Section

@@ -1,0 +1,14 @@
+{
+ "rebuild_identical": true,
+ "runs": [
+  21,
+  22
+ ],
+ "vs_backtest_run_15": {
+  "matches": 48607,
+  "max_abs_diff": 0.0,
+  "abstention_mismatches": 0
+ },
+ "formula_max_abs_diff": 1.1102230246251565e-16,
+ "symmetry_max_error": 2.220446049250313e-16
+}

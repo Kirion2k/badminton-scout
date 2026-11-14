@@ -685,9 +685,47 @@ def _ratings(args: argparse.Namespace) -> int:
             ll = t.get("log_loss", {})
             print(f"{key}: run {m['run_id']}, test {t['predicted']}/{t['matches']} predicted, "
                   f"log loss {ll.get('mean', float('nan')):.4f}")  # fmt: skip
+    elif args.action == "serve-bwf":
+        from scout.ratings.production import rebuild
+
+        print(f"served run {rebuild(engine, args.selection, args.calibration)}")
+    elif args.action == "calibrate":
+        result = commands.calibrate(engine, args.run, args.out)
+        print(
+            f"selected: {result['selected']}; {result['final'][result['selected']]['parameters']}"
+        )
     else:
         commands.audit(engine, {"bwf": args.bwf, "fed": args.fed}, args.out)
         print(f"audit written to {args.out}")
+    return 0
+
+
+def _matchups(args: argparse.Namespace) -> int:
+    """Prospective forecasts: recorded before the match, scored after (ADR-0013)."""
+    import json
+    from datetime import date
+
+    from sqlalchemy.orm import Session
+
+    from scout.db import get_engine
+    from scout.ratings import prospective
+
+    with Session(get_engine()) as s:
+        try:
+            if args.action == "issue":
+                row = prospective.issue(s, args.a, args.b, args.discipline,
+                                        date.fromisoformat(args.on), args.ref)  # fmt: skip
+                s.commit()
+                print(f"forecast {row.id} recorded at {row.issued_at}: P(a) = {row.p_a:.4f}")
+            elif args.action == "resolve":
+                counts = prospective.resolve(s, args.verified_by)
+                s.commit()
+                print(counts)
+            else:
+                print(json.dumps(prospective.score(s), indent=1, default=str))
+        except prospective.NotEligible as e:
+            print(f"not issued: {e}", file=sys.stderr)
+            return 2
     return 0
 
 
@@ -881,10 +919,33 @@ def main(argv: list[str] | None = None) -> None:
     ev.add_argument("family", choices=["bwf", "fed"])
     ev.add_argument("selection", type=Path)
     ev.add_argument("--out", type=Path, required=True)
+    cb = ratings_actions.add_parser("calibrate", help="fit calibrators on 2012-2024 (ADR-0013)")
+    cb.add_argument("run", type=int, help="a stored BWF singles run of the frozen configuration")
+    cb.add_argument("--out", type=Path, required=True)
+    srv = ratings_actions.add_parser(
+        "serve-bwf", help="full rebuild of the served BWF singles ratings (ADR-0013)"
+    )
+    srv.add_argument(
+        "--selection", type=Path, default=Path("../docs/research/m8-bwf-selected.json")
+    )
+    srv.add_argument(
+        "--calibration", type=Path, default=Path("../docs/research/m8.1-calibration.json")
+    )
     au = ratings_actions.add_parser("audit", help="identity, duplicates and connectivity counts")
     au.add_argument("--bwf", type=int, required=True, help="BWF snapshot id")
     au.add_argument("--fed", type=int, required=True, help="federation snapshot id")
     au.add_argument("--out", type=Path, required=True)
+    mu = commands.add_parser("matchups", help="prospective forecasts (ADR-0013), internal only")
+    mu_actions = mu.add_subparsers(dest="action", required=True)
+    iss = mu_actions.add_parser("issue", help="record a forecast before the match is played")
+    iss.add_argument("--a", type=int, required=True, help="player id")
+    iss.add_argument("--b", type=int, required=True, help="player id")
+    iss.add_argument("--discipline", choices=["MS", "WS"], required=True)
+    iss.add_argument("--on", required=True, help="scheduled date, YYYY-MM-DD")
+    iss.add_argument("--ref", required=True, help="the match: tournament, draw and round")
+    res = mu_actions.add_parser("resolve", help="fill forecasts from imported verified results")
+    res.add_argument("--verified-by", required=True, help="who checked the imported results")
+    mu_actions.add_parser("score", help="resolved forecasts against the release conditions")
     events = commands.add_parser("events", help="event classification")
     reclassify = events.add_subparsers(dest="action", required=True).add_parser(
         "reclassify", help="re-read disciplines and categories from codes (docs/event-codes.md)"
@@ -950,6 +1011,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "privacy":
         actions = {"reclassify": _reclassify, "minimise": _minimise}
         sys.exit(actions[args.action]() if args.action in actions else _withhold(args))
+    elif args.command == "matchups":
+        sys.exit(_matchups(args))
     elif args.command == "events":
         sys.exit(_events(args))
     elif args.command == "ratings":

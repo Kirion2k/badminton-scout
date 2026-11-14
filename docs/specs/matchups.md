@@ -1,14 +1,17 @@
 # Spec: `GET /v1/matchups/compare` (designed in M8, not published)
 
-**Status:** contract only. The response models live in `backend/src/scout/matchups.py`, with
-tests. **No route is mounted**: a test asserts `/v1/matchups/compare` returns 404. Publishing
-needs the owner's approval of `docs/research/m8-rating-feasibility.md`.
+**Status (M8.1):** mounted, with **both public flags off** (`matchups.PUBLIC_PROBABILITIES`,
+`matchups.PUBLIC_RATINGS`). Nothing returns a probability or rating number. A probability also
+needs `RELEASE_EVIDENCE` from a passed prospective evaluation (ADR-0013). Page: `/compare`.
 
 ## Request
 `GET /v1/matchups/compare?a=<player id>&b=<player id>&discipline=MS|WS`
 
-Merged ids redirect to the canonical pair (308), as head-to-head does. Doubles are not offered:
-doubles models are offline research only.
+Merged ids redirect to the canonical pair (308). A withheld or unknown player is 404, and the
+same player twice is 422. Doubles are not offered: doubles models are offline research only.
+
+The response also carries `discipline`, `ratings_shown` (false unless `PUBLIC_RATINGS`), and
+`data_as_of` (the BWF ratings' last match day, when a BWF player is involved).
 
 ## Response: one of five outcomes
 | `outcome` | When | Carries |

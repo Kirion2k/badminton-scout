@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import { ids } from "./fixture";
 
 const pages = () => {
-  const { alex, spring, jordan } = ids();
+  const { alex, spring, jordan, sam } = ids();
   return [
     "/",
     "/?q=tester",
@@ -13,6 +13,8 @@ const pages = () => {
     `/players/${alex}`,
     `/players/${alex}/vs/${jordan}`, // a comparison (no meetings: the empty state)
     `/players/${alex}/vs?q=sam`,
+    `/compare?a=${alex}&b=${sam}&discipline=MS`, // a matchup: results only, no number
+    "/compare?qa=tester",
     "/coverage",
   ];
 };

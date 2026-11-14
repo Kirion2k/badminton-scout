@@ -193,6 +193,13 @@ def glicko2_update(
     return Glicko2Player(mu_new * _SCALE + 1500.0, phi_new * _SCALE, sigma)
 
 
+def glicko2_expected(rating_a: float, rd_a: float, rating_b: float, rd_b: float) -> float:
+    """P(a beats b) from two Glicko-2 ratings, with both deviations combined. Swapping the
+    players gives exactly 1 - p (the logistic of a negated argument)."""
+    phi = math.sqrt((rd_a / _SCALE) ** 2 + (rd_b / _SCALE) ** 2)
+    return 1.0 / (1.0 + math.exp(-_g(phi) * (rating_a - rating_b) / _SCALE))
+
+
 @dataclass(frozen=True)
 class Glicko2Config:
     tau: float = 0.5
@@ -229,8 +236,7 @@ class Glicko2:
 
     def predict(self, a: int, b: int) -> float:
         pa, pb = self.player(a), self.player(b)
-        phi = math.sqrt((pa.rd / _SCALE) ** 2 + (pb.rd / _SCALE) ** 2)
-        return 1.0 / (1.0 + math.exp(-_g(phi) * (pa.rating - pb.rating) / _SCALE))
+        return glicko2_expected(pa.rating, pa.rd, pb.rating, pb.rd)
 
     def at(self, day: date) -> None:
         """Close every period that ended before `day`."""

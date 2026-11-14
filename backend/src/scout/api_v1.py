@@ -1,18 +1,22 @@
 """Read API over normalized data. Only redistributable events are ever visible (ADR-0009)."""
 
+import dataclasses
+import urllib.parse
 from collections import Counter, defaultdict
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import ColumnElement, Select, exists, func, literal, or_, select, text
 from sqlalchemy.orm import Session
 
 import scout.privacy
+from scout import matchups
 from scout.db import get_session
 from scout.ingest.tournamentsoftware import discipline_of
+from scout.matchups import Matchup
 from scout.models import (
     Event,
     Game,
@@ -23,6 +27,7 @@ from scout.models import (
     MatchSidePlayer,
     Player,
     PlayerLink,
+    RatingCurrent,
     RawRecord,
     RawRecordRevision,
     Source,
@@ -31,6 +36,7 @@ from scout.models import (
     TournamentDiscovery,
 )
 from scout.privacy import is_redistributable_event
+from scout.ratings import production
 from scout.sources import SOURCES
 
 router = APIRouter(prefix="/v1", tags=["players"])
@@ -449,6 +455,18 @@ def _player_or_redirect(db: Session, player_id: int, suffix: str = "") -> Player
     return player
 
 
+def _merged_into(db: Session, player_id: int) -> list[int]:
+    """Every record merged (directly or through others) into this player."""
+    found: list[int] = []
+    frontier = [player_id]
+    for _ in range(5):  # merge chains are short (ADR-0003); _canonical follows at most 5 hops
+        frontier = list(db.scalars(select(Player.id).where(Player.merged_into_id.in_(frontier))))
+        if not frontier:
+            break
+        found += frontier
+    return found
+
+
 def _canonical(db: Session, player_id: int) -> Player:
     """The player a (possibly merged) id now belongs to; 404 for unknown, withheld or hidden."""
     player = db.get(Player, player_id)
@@ -816,6 +834,68 @@ def head_to_head(db: DB, a_id: int, b_id: int) -> HeadToHead | RedirectResponse:
         matches=matches,
         common_opponents=common,
     )
+
+
+@router.get("/matchups/compare", response_model=Matchup)
+def compare_matchup(
+    db: DB, response: Response, a: int, b: int, discipline: Literal["MS", "WS"] = "MS"
+) -> Matchup | RedirectResponse:
+    """Mynton Matchup (ADR-0013). Probabilities and rating numbers are behind flags that are
+    off: until then this compares results only and says why no probability is given."""
+    pa, pb = _canonical(db, a), _canonical(db, b)
+    if pa.id == pb.id:
+        raise HTTPException(422, "a player cannot be compared with themselves")
+    if (pa.id, pb.id) != (a, b):
+        query = urllib.parse.urlencode({"a": pa.id, "b": pb.id, "discipline": discipline})
+        return RedirectResponse(f"/v1/matchups/compare?{query}", status_code=308)
+    served = production.served(db)
+    rated: dict[int, matchups.Rated] = {}
+    stale = False
+    if served is not None:
+        for r in db.scalars(
+            select(RatingCurrent).where(
+                RatingCurrent.run_id == served.run_id,
+                RatingCurrent.pool == f"bwf:{discipline}",  # never a federation or junior pool
+                RatingCurrent.player_id.in_(
+                    [pa.id, pb.id, *_merged_into(db, pa.id), *_merged_into(db, pb.id)]
+                ),
+            )
+        ):
+            if r.player_id not in (pa.id, pb.id):
+                stale = True  # a rated record merged after the rebuild: the rating is outdated
+                continue
+            rated[r.player_id] = matchups.Rated(
+                rating=r.rating, rd=r.rd, played=r.played, last_played=r.last_played,
+                component=r.component, identity_flagged=r.identity_flagged, vol=r.vol or 0.06,
+            )  # fmt: skip
+        if stale:  # never a rating or probability for a record whose identity changed since
+            rated = {pid: dataclasses.replace(r, identity_flagged=True) for pid, r in rated.items()}
+
+    def standing(pid: int) -> matchups.Standing:
+        sides = _sides_of(pid).subquery()
+        n, last = db.execute(
+            select(func.count(), func.max(Match.played_on))
+            .select_from(sides)
+            .join(Match, Match.id == sides.c.match_id)
+            .join(Event, Event.id == Match.event_id)
+            .where(Event.discipline == discipline)
+        ).one()
+        return matchups.Standing(pid, n, last, rated.get(pid))
+
+    sa, sb = _sides_of(pa.id).subquery(), _sides_of(pb.id).subquery()
+    met = db.execute(
+        select(Match.winner_side, sa.c.side)
+        .join(sa, sa.c.match_id == Match.id)
+        .join(sb, (sb.c.match_id == Match.id) & (sb.c.side != sa.c.side))
+        .join(Event, Event.id == Match.event_id)
+        .where(Event.discipline == discipline, Match.winner_side.is_not(None))
+    ).all()
+    h2h = (sum(w == side for w, side in met), sum(w != side for w, side in met))
+    result = matchups.decide(standing(pa.id), standing(pb.id), discipline, served,
+                             head_to_head=h2h, on=date.today())  # fmt: skip
+    if result.ratings_shown or result.probability_a is not None:
+        response.headers["cache-control"] = "no-store"  # nothing derived from ratings is cached
+    return result
 
 
 @router.get("/tournaments/{tournament_id}")

@@ -1,6 +1,40 @@
 {
   "components": {
     "schemas": {
+      "Calibration": {
+        "description": "How such forecasts did in the held-out test period: the reliability bin this forecast\nfalls in, so the number comes with its track record.",
+        "properties": {
+          "bin_hi": {
+            "title": "Bin Hi",
+            "type": "number"
+          },
+          "bin_lo": {
+            "title": "Bin Lo",
+            "type": "number"
+          },
+          "forecasts": {
+            "title": "Forecasts",
+            "type": "integer"
+          },
+          "observed_rate": {
+            "title": "Observed Rate",
+            "type": "number"
+          },
+          "test_log_loss": {
+            "title": "Test Log Loss",
+            "type": "number"
+          }
+        },
+        "required": [
+          "bin_lo",
+          "bin_hi",
+          "forecasts",
+          "observed_rate",
+          "test_log_loss"
+        ],
+        "title": "Calibration",
+        "type": "object"
+      },
       "CommonOpponent": {
         "description": "Someone both players have met in decided matches; each record from that player's side.",
         "properties": {
@@ -191,6 +225,71 @@
         },
         "required": ["name", "discipline", "matches"],
         "title": "EventSummary",
+        "type": "object"
+      },
+      "Evidence": {
+        "properties": {
+          "last_played": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Played"
+          },
+          "player_id": {
+            "title": "Player Id",
+            "type": "integer"
+          },
+          "pool": {
+            "title": "Pool",
+            "type": "string"
+          },
+          "prior_matches": {
+            "title": "Prior Matches",
+            "type": "integer"
+          },
+          "provisional": {
+            "title": "Provisional",
+            "type": "boolean"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "rating_deviation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating Deviation"
+          }
+        },
+        "required": [
+          "player_id",
+          "pool",
+          "rating",
+          "rating_deviation",
+          "prior_matches",
+          "provisional",
+          "last_played"
+        ],
+        "title": "Evidence",
         "type": "object"
       },
       "FormatRecord": {
@@ -399,6 +498,169 @@
         },
         "required": ["items", "total", "limit", "offset"],
         "title": "MatchPage",
+        "type": "object"
+      },
+      "Matchup": {
+        "properties": {
+          "a": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Evidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "b": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Evidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calibration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Calibration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "discipline": {
+            "default": "MS",
+            "enum": ["MS", "WS"],
+            "title": "Discipline",
+            "type": "string"
+          },
+          "head_to_head": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head To Head"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "probability",
+              "comparison",
+              "insufficient_data",
+              "incompatible_pools",
+              "identity_uncertain"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "probability_a": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability A"
+          },
+          "ratings_shown": {
+            "default": false,
+            "title": "Ratings Shown",
+            "type": "boolean"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": ["outcome", "a", "b"],
+        "title": "Matchup",
+        "type": "object"
+      },
+      "ModelInfo": {
+        "properties": {
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "data_as_of": {
+            "format": "date",
+            "title": "Data As Of",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "run_id",
+          "snapshot_id",
+          "data_as_of",
+          "computed_at"
+        ],
+        "title": "ModelInfo",
         "type": "object"
       },
       "OpponentRecord": {
@@ -1491,6 +1753,67 @@
           }
         },
         "summary": "Coverage",
+        "tags": ["players"]
+      }
+    },
+    "/v1/matchups/compare": {
+      "get": {
+        "description": "Mynton Matchup (ADR-0013). Probabilities and rating numbers are behind flags that are\noff: until then this compares results only and says why no probability is given.",
+        "operationId": "compare_matchup_v1_matchups_compare_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "a",
+            "required": true,
+            "schema": {
+              "title": "A",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "b",
+            "required": true,
+            "schema": {
+              "title": "B",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "discipline",
+            "required": false,
+            "schema": {
+              "default": "MS",
+              "enum": ["MS", "WS"],
+              "title": "Discipline",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Matchup"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare Matchup",
         "tags": ["players"]
       }
     },

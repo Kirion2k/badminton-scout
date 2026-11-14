@@ -255,3 +255,54 @@ test("suggestions as you type: pick one with the keyboard", async ({
   await search.press("Enter");
   await expect(page).toHaveURL(/\/\?q=alex\+tes/);
 });
+
+test("matchup: pick two players, compare results, never a percentage", async ({
+  page,
+}) => {
+  await page.goto("/compare");
+  const first = page.getByRole("search", { name: "Find the first player" });
+  await first.getByRole("searchbox").fill("alex tester");
+  await first.getByRole("button", { name: "Search" }).click();
+  await page
+    .getByRole("link", { name: /Alex TESTER/ })
+    .first()
+    .click();
+  const second = page.getByRole("search", { name: "Find the second player" });
+  await second.getByRole("searchbox").fill("sam example");
+  await second.getByRole("button", { name: "Search" }).click();
+  await page
+    .getByRole("link", { name: /Sam EXAMPLE/ })
+    .first()
+    .click();
+
+  await expect(page).toHaveURL(/\/compare\?.*a=\d+.*b=\d+/);
+  const matchup = page.locator("section", {
+    has: page.getByRole("heading", { name: "Matchup" }),
+  });
+  await expect(matchup.getByText("Historical comparison")).toBeVisible();
+  await expect(matchup.getByText(/no validated rating/)).toBeVisible();
+  await expect(matchup).not.toContainText("%"); // probabilities are off (ADR-0013)
+  await expect(page.getByRole("heading", { name: "Meetings" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Recent results: Alex TESTER/ }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Women's singles" }).click();
+  await expect(
+    matchup.getByText("Not enough results to compare"),
+  ).toBeVisible();
+});
+
+test("matchup: a merged player's old id stays on the matchup page", async ({
+  page,
+}) => {
+  const { jordanMergedFrom, jordan, alex } = ids();
+  await page.goto(`/compare?a=${jordanMergedFrom}&discipline=WS`);
+  await expect(page).toHaveURL(
+    new RegExp(`/compare\\?discipline=WS&a=${jordan}$`),
+  );
+  await page.goto(`/compare?a=${jordanMergedFrom}&b=${alex}&discipline=MS`);
+  await expect(page).toHaveURL(
+    new RegExp(`/compare\\?a=${jordan}&b=${alex}&discipline=MS$`),
+  );
+});

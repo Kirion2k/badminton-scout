@@ -171,3 +171,29 @@ def test_review_rating_history_is_kept_per_pool() -> None:
         n for (pool, q, _), (*_, n) in history.points.items() if pool == "fed:MS" and q == p
     )
     assert adult == sum(1 for r in data if p in (r.a, r.b))
+
+
+def test_seed_markers_are_read_from_the_raw_listing() -> None:
+    from scout.ratings.audit import _SEED  # pyright: ignore[reportPrivateUsage]
+
+    assert _SEED.search("Ann LEE [3/4]") and _SEED.search("Ann LEE [1]")
+    assert not _SEED.search("Ann LEE") and not _SEED.search("Ann [3] LEE")
+
+
+def test_the_served_ratings_count_components_and_matches_per_pool() -> None:
+    from scout.ratings.production import replay_current
+
+    day = DAY + timedelta(days=5)
+    pool = [
+        Row(1, 1, "bwf:MS", DAY, round_rank("R16"), 1, 1, 2, True),
+        Row(2, 2, "bwf:MS", day, round_rank("QF"), 1, 1, 3, False),
+        Row(3, 3, "bwf:MS", day, round_rank("QF"), 1, 7, 8, True),  # a separate island
+    ]
+    preds, current = replay_current({"bwf:MS": pool}, {"period_days": 3}, True, {8}, day)
+    got = {c["player_id"]: c for c in current}
+    assert {p: got[p]["played"] for p in got} == {1: 2, 2: 1, 3: 1, 7: 1, 8: 1}
+    assert got[1]["last_played"] == day and got[2]["last_played"] == DAY
+    assert got[1]["component"] == got[2]["component"] == got[3]["component"]
+    assert got[7]["component"] == got[8]["component"] != got[1]["component"]
+    assert got[8]["identity_flagged"] and not got[1]["identity_flagged"]
+    assert len(preds) == 3 and all(p.abstain for p in preds)  # nobody had an earlier day
