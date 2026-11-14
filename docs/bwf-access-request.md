@@ -72,3 +72,40 @@ player linking with BWF is untested.
 - an allowlisted connection to `bwfbadminton.com` that is not challenged.
 
 Nothing else blocks BWF results.
+
+## M7 investigation of the public Fansite (2026-11-14)
+
+The Fansite (`bwfbadminton.com`) was tested on its own, separately from the Tournament Software
+admin portal (`bwf.tournamentsoftware.com`, login). No challenge was bypassed; 38 requests were
+recorded against source `bwf`.
+
+| Path | Home page | Tournament pages (5853 info, 5842 results, 5756 info) | Data API |
+|---|---|---|---|
+| Plain HTTP (curl, Chrome UA) | 403, `cf-mitigated: challenge` | 403 challenge (all three) | 403 challenge |
+| Headless Chromium (Playwright) | 403 challenge | 403 challenge | not reached |
+| Headed Chromium (Playwright) | **200, content** | 403 challenge (interactive) | called by the page, 200 JSON |
+| Installed Google Chrome, headed | **200, content** | 403 challenge (interactive) | called by the page, 200 JSON |
+| API Anything learn (learning home) | – | reached the page | page called `vue-tournament-events`, `vue-tournament-podium` |
+
+- **No login anywhere on the Fansite.** The block is Cloudflare's bot challenge, not authentication.
+- **The data comes from `extranet-lv.bwfbadminton.com/api/vue-*`**: JSON GETs with no
+  Authorization header, observed in the browser: `vue-tmt-schedule`, `vue-home-ranking`,
+  `vue-tmt-live-scores`, `vue-tournament-events?tmtId=…`, `vue-tournament-podium?tmtId=…`.
+- **Plain HTTP to that API is challenged** (403), and its robots.txt is `Disallow: /` for every
+  agent.
+- **The host is outside the recorded scope.** `data-sources.md` scopes the BWF attestation to
+  `bwfbadminton.com` only.
+- **API Anything's capture browser is not used for BWF.** It runs headless Chrome with the
+  "HeadlessChrome" user agent rewritten to "Chrome" and waits out JS challenges. That masks
+  automation, and ADR-0007 keeps ingestion at tier 1. The one learn attempt is disclosed; nothing
+  was built on it.
+- **No public match data was retrieved programmatically, and no BWF record was imported.** Source
+  `bwf` stays `pending_access`.
+
+**What would make it work (ask BWF for one):**
+1. A Cloudflare allowlist (IP or a header token) for read-only GETs to
+   `extranet-lv.bwfbadminton.com/api/vue-*` and `bwfbadminton.com/tournament/*`.
+2. A documented results feed or export.
+
+With either, record `extranet-lv.bwfbadminton.com` and its robots exception in `data-sources.md`;
+the operations are then plain tier-1 GETs.
