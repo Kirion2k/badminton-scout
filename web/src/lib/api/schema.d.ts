@@ -411,7 +411,8 @@ export interface components {
         | "partially_validated"
         | "pending_access"
         | "access_unavailable"
-        | "source_error";
+        | "source_error"
+        | "historical_archive";
     };
     /** Readiness */
     Readiness: {
