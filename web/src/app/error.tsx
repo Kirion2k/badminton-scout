@@ -16,7 +16,7 @@ export default function ErrorPage({
         The data service didn’t answer
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Badminton Scout couldn’t load these records just now. Nothing on your
+        Mynton couldn’t load these records just now. Nothing on your
         side caused this.
       </p>
       <Button className="mt-6" onClick={reset}>

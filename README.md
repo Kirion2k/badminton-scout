@@ -1,8 +1,10 @@
-# Badminton Scout
+# Mynton
 
-A badminton player-intelligence platform: search players, explore verified match history, follow form and compare players, with every number traceable to its source.
+Mynton (repository and code name: `badminton-scout`) is a badminton player-intelligence platform: search players, explore verified match history, follow form and compare players, with every number traceable to its source.
 
-**Status: Milestone 0 (engineering foundation).** There is a backend skeleton with health and readiness endpoints, the database schema for revisioned raw records, a default-deny data-rights gate, tests and CI. There are no player features, frontend or real data yet. Plan and decisions: [`docs/kickoff-report.md`](docs/kickoff-report.md), [`docs/adr/`](docs/adr), [`docs/data-sources.md`](docs/data-sources.md).
+**Status:** player search, profiles, head-to-head comparison, tournament results and source coverage across several national federations and a third-party BWF historical compilation. Decisions: [`docs/adr/`](docs/adr), data rights: [`docs/data-sources.md`](docs/data-sources.md), design: [`DESIGN.md`](DESIGN.md).
+
+**Name clearance (2026-11-14, not a legal opinion):** a web search found no "Mynton" product or trademark; similar marks exist in badminton (Crossminton, Redminton, Speedminton, BWF's AirBadminton). `mynton.com` is registered to someone else; `.app`, `.io` and `.com.au` did not resolve, which does not prove they are free. Before launch: formal searches of the USPTO, EUIPO, UK IPO and IP Australia registers in classes 9, 41 and 42, and a registrar check of the domains.
 
 ## Requirements
 
