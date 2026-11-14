@@ -472,6 +472,16 @@ def search_players(
     score = func.greatest(
         func.similarity(Player.display_name, q), func.word_similarity(q, Player.display_name)
     )
+    # name matches first (trigram index), so match counts are aggregated for those players only
+    candidates = select(Player.id).where(
+        Player.merged_into_id.is_(None),
+        Player.withheld_at.is_(None),
+        # indexable trigram operators (similarity 0.3 / word similarity 0.6 thresholds)
+        or_(
+            Player.display_name.op("%", is_comparison=True)(q),
+            literal(q).op("<%", is_comparison=True)(Player.display_name),
+        ),
+    )
     visible = (
         select(
             PlayerLink.player_id,
@@ -481,22 +491,13 @@ def search_players(
         .join(MatchSidePlayer, MatchSidePlayer.source_player_id == PlayerLink.source_player_id)
         .join(MatchSide, MatchSide.id == MatchSidePlayer.match_side_id)
         .join(Match, Match.id == MatchSide.match_id)
-        .where(Match.id.in_(_visible_matches()))
+        .where(Match.id.in_(_visible_matches()), PlayerLink.player_id.in_(candidates))
         .group_by(PlayerLink.player_id)
         .subquery()
     )
     rows = db.execute(
         select(Player.id, Player.display_name, visible.c.n, visible.c.last)
         .join(visible, visible.c.player_id == Player.id)
-        .where(
-            Player.merged_into_id.is_(None),
-            Player.withheld_at.is_(None),
-            # indexable trigram operators (similarity 0.3 / word similarity 0.6 thresholds)
-            or_(
-                Player.display_name.op("%", is_comparison=True)(q),
-                literal(q).op("<%", is_comparison=True)(Player.display_name),
-            ),
-        )
         .order_by(score.desc(), visible.c.n.desc())
         .limit(limit)
     ).all()
@@ -1057,7 +1058,6 @@ def _status(source_id: str, stored: int, recent_runs: list[str]) -> ProviderStat
 @router.get("/coverage")
 def coverage(db: DB) -> Coverage:
     """Per provider: derived status and counts. Public counts include served data only."""
-    visible = select(_visible_matches().subquery().c.id)
     # every authorised provider with hosts, in registry order: the global integration tracker
     listed = [sid for sid, rights in SOURCES.items() if rights.hosts or sid in FILE_SOURCES]
     sources = {s.id: s for s in db.scalars(select(Source).where(Source.id.in_(listed)))}
@@ -1080,7 +1080,7 @@ def coverage(db: DB) -> Coverage:
             func.min(Match.played_on),
             func.max(Match.played_on),
         )
-        .where(Match.id.in_(visible))
+        .where(Event.redistributable)  # what _visible_matches() serves, on the joined event
         .group_by(Tournament.source_id)
     )
     people = (
@@ -1090,13 +1090,15 @@ def coverage(db: DB) -> Coverage:
         .join(MatchSide, MatchSide.match_id == Match.id)
         .join(MatchSidePlayer, MatchSidePlayer.match_side_id == MatchSide.id)
         .join(PlayerLink, PlayerLink.source_player_id == MatchSidePlayer.source_player_id)
-        .where(Match.id.in_(visible))
+        .where(Event.redistributable)  # what _visible_matches() serves, on the joined event
         .distinct()
         .subquery()
     )
-    players = per_source(
-        select(people.c.source_id, func.count(people.c.player_id)).group_by(people.c.source_id)
-    )
+    # one scan for both counts: players per source, and distinct players over all sources
+    by_source: dict[str, set[int]] = defaultdict(set)
+    for sid, pid in db.execute(select(people.c.source_id, people.c.player_id)):
+        by_source[sid].add(pid)
+    players = {sid: len(ids) for sid, ids in by_source.items()}
     discovered = per_source(
         select(TournamentDiscovery.owner_source, func.count())
         .where(TournamentDiscovery.owner_source.is_not(None))
@@ -1171,7 +1173,7 @@ def coverage(db: DB) -> Coverage:
                 last_sync_status=syncs[sid].status if sid in syncs else None,
             )
         )
-    distinct_players = db.scalar(select(func.count(func.distinct(people.c.player_id)))) or 0
+    distinct_players = len(set[int]().union(*by_source.values()))
     return Coverage(
         providers=providers,
         last_sync_at=finished,
