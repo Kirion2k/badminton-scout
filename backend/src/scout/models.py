@@ -200,6 +200,7 @@ class Event(Base):
     __table_args__ = (
         UniqueConstraint("tournament_id", "source_key"),
         CheckConstraint("discipline IN ('MS', 'WS', 'MD', 'WD', 'XD')", name="discipline_valid"),
+        CheckConstraint("category IN ('adult', 'junior', 'para')", name="category_valid"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -207,6 +208,9 @@ class Event(Base):
     source_key: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
     discipline: Mapped[str | None] = mapped_column(String(2))  # null when the name doesn't say
+    # "adult", "junior" or "para" from the name and the tournament's codes (ingest/event_codes.py);
+    # null until classified. Rating pools never mix them (ADR-0012).
+    category: Mapped[str | None] = mapped_column(String(8))
     # ADR-0009: false (the default) keeps the event, its matches and players out of the API
     redistributable: Mapped[bool] = mapped_column(server_default="false", index=True)
 

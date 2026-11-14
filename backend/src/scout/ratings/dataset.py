@@ -73,8 +73,9 @@ class Row:
     a_won: bool
 
 
-def classify(family: str, c: Candidate) -> tuple[str | None, str]:
-    """(pool, "eligible") or (None, the reason it is not rated)."""
+def classify(family: str, c: Candidate, *, include_retired: bool = False) -> tuple[str | None, str]:
+    """(pool, "eligible") or (None, the reason it is not rated). `include_retired` is the
+    ADR-0012 sensitivity variant: a retirement with a winner counts as a result."""
     if c.discipline is None:
         return None, "unclassified_event"
     if c.discipline not in ("MS", "WS"):
@@ -86,7 +87,7 @@ def classify(family: str, c: Candidate) -> tuple[str | None, str]:
             return None, "para_event"
         if kind == "junior":
             pool += ":junior"
-    if c.status != "completed":
+    if c.status != "completed" and not (include_retired and c.status == "retired"):
         return None, f"status_{c.status}"
     if c.winner_side not in (1, 2):
         return None, "no_winner"
@@ -121,9 +122,7 @@ def candidates(conn: Connection, family: str) -> Iterable[Candidate]:
                    select pl.source_player_id, up.root from player_link pl
                    join up on up.id = pl.player_id"""
             )
-        )
-        .tuples()
-        .all()
+        ).all()
     )
     withheld = {
         r[0] for r in conn.execute(text("select id from player where withheld_at is not null"))
@@ -158,12 +157,14 @@ def candidates(conn: Connection, family: str) -> Iterable[Candidate]:
         )  # fmt: skip
 
 
-def build(conn: Connection, family: str) -> tuple[list[Row], Counter[str]]:
+def build(
+    conn: Connection, family: str, *, include_retired: bool = False
+) -> tuple[list[Row], Counter[str]]:
     """The eligible rows in replay order, and counts: `pool` and `excluded:<reason>` keys."""
     rows: list[Row] = []
     counts: Counter[str] = Counter()
     for c in candidates(conn, family):
-        pool, reason = classify(family, c)
+        pool, reason = classify(family, c, include_retired=include_retired)
         if pool is None:
             counts[f"excluded:{reason}"] += 1
             continue
@@ -187,10 +188,12 @@ def content_hash(rows: Iterable[Row]) -> str:
     return h.hexdigest()
 
 
-def snapshot(engine: Engine, family: str) -> int:
+def snapshot(engine: Engine, family: str, *, include_retired: bool = False) -> int:
     """Freeze the family's eligible matches. Returns the snapshot id."""
     with engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-        rows, counts = build(conn, family)
+        rows, counts = build(conn, family, include_retired=include_retired)
+        if include_retired:
+            counts["option:include_retired"] = 1
         conn.rollback()  # read-only
     with Session(engine) as s, s.begin():
         snap = RatingSnapshot(

@@ -640,6 +640,27 @@ def _reclassify() -> int:
     return 0
 
 
+def _events(args: argparse.Namespace) -> int:
+    """Discipline and category of every Tournament Software event, read in its tournament's
+    language. Changes are counted by source and old->new discipline."""
+    from sqlalchemy.orm import Session
+
+    from scout.db import get_engine
+    from scout.ingest.event_codes import reclassify
+
+    with Session(get_engine()) as s:
+        counts = reclassify(s, dry_run=args.dry_run)
+        if args.dry_run:
+            s.rollback()
+        else:
+            s.commit()
+    for key, n in sorted(counts.items()):
+        if not key.startswith("events "):
+            print(f"{key}: {n}")
+    print("dry run: nothing written" if args.dry_run else "applied")
+    return 0
+
+
 def _identity(args: argparse.Namespace) -> int:
     """Review identity candidates (ADR-0003). Every decision is recorded and reversible."""
     import getpass
@@ -788,6 +809,11 @@ def main(argv: list[str] | None = None) -> None:
         p = privacy_actions.add_parser(action, help=f"{what}: one player, audited")
         p.add_argument("player", type=int, help="player id (as in /players/<id>)")
         p.add_argument("--reason", required=True, help="who asked and why: kept in the audit log")
+    events = commands.add_parser("events", help="event classification")
+    reclassify = events.add_subparsers(dest="action", required=True).add_parser(
+        "reclassify", help="re-read disciplines and categories from codes (docs/event-codes.md)"
+    )
+    reclassify.add_argument("--dry-run", action="store_true", help="report changes, write nothing")
     ident = commands.add_parser("identity", help="review player identity candidates (ADR-0003)")
     ident_actions = ident.add_subparsers(dest="action", required=True)
     ident_actions.add_parser("candidates", help="find and list open candidates")
@@ -847,6 +873,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "privacy":
         actions = {"reclassify": _reclassify, "minimise": _minimise}
         sys.exit(actions[args.action]() if args.action in actions else _withhold(args))
+    elif args.command == "events":
+        sys.exit(_events(args))
     elif args.command == "identity":
         sys.exit(_identity(args))
     elif args.command == "report":

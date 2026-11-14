@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from scout.budget import Budget, BudgetExhausted
+from scout.ingest.event_codes import reclassify
 from scout.ingest.operations import TsMatchDay, TsMatchRow, TsTournament
 from scout.ingest.provider import ApiAnythingProvider, OperationFailed, ProviderError
 from scout.ingest.tournamentsoftware import ingest_rows
@@ -280,6 +281,12 @@ def import_tournament(
         run.finished_at = datetime.now(UTC)
         session.commit()
         raise
+    # disciplines are read in the tournament's own language, once its events are known
+    tournament_id = session.scalar(
+        select(Tournament.id).filter_by(source_id=portal.source_id, source_key=row.guid)
+    )
+    if tournament_id is not None:
+        reclassify(session, [tournament_id])
     counts["requests"] += provider.requests_made(portal.source_id) - start_requests
     run.finished_at = datetime.now(UTC)
     run.counts = {"tournament": row.guid, **counts}
