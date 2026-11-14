@@ -30,8 +30,8 @@ are never compared. A provisional player never gets a probability. Every other o
 ## Model and freshness
 `model`: name, version (the configuration hash), run, snapshot, `data_as_of` (the last match day
 in the snapshot) and `computed_at`. Ratings come only from a stored run (`rating_run`), never
-computed per request. A historical correction triggers a rebuild: a full replay by default.
-Incremental rebuilds are tested to be identical.
+computed per request. A historical correction triggers a full rebuild (seconds at this size);
+`affected_from` reports which stored predictions it changed.
 
 ## Not in this contract
 - Leaderboards or rankings.

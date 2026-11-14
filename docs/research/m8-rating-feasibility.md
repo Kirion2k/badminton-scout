@@ -1,12 +1,12 @@
 # M8: Can Mynton estimate strength and predict matchups?
 
 2026-11-14. Protocol: ADR-0012, pre-registered in `e48537f` before any model touched real data.
-Selections were committed before each test split was read:
-- BWF singles: `7c6d7f3`
-- doubles: `92edb51`
-- federations: `3e7cada`
 
-Each test split was evaluated once. Raw results are in `docs/research/m8-*-results.json` and
+The test splits were read **twice**. An independent review then found a same-day leakage bug and an
+unfair batching comparison (see "Review and the second test read" at the end). After the fixes
+(`13d67f0`), every configuration was re-selected on validation only. The selections were
+committed in `7a756bc` before the test splits were read again. The numbers below are from that
+second read. Raw results are in `docs/research/m8-*-results.json` and
 `m8-audit.json`. Every figure below comes from those runs, reproducible with
 `scout ratings snapshot | tune | evaluate | audit`.
 
@@ -21,8 +21,8 @@ Each test split was evaluated once. Raw results are in `docs/research/m8-*-resul
 | Pool | Beats baselines (95% CI) | Calibrated | Coverage of test matches | Verdict |
 |---|---|---|---|---|
 | BWF MS/WS | yes, clearly | mostly (ECE 0.02; 0.5–0.7 too confident) | 95% | **conditional go:** established players, after recalibration and owner approval |
-| Federation MS/WS (adult, junior) | yes, modestly (tuned only) | no (ECE 0.03–0.04, extremes off by up to 7 points) | 55% | **no-go:** show ratings-free comparisons only |
-| BWF doubles | yes, clearly (TrueSkill) | yes (ECE 0.015) | 92% | **research only** (as instructed) |
+| Federation MS/WS (adult, junior) | yes, modestly (tuned only) | no (ECE 0.026–0.037; low forecasts 4–8 points too low) | 38% | **no-go:** show ratings-free comparisons only |
+| BWF doubles | yes, clearly (TrueSkill) | yes (ECE 0.016) | 92% | **research only** (as instructed) |
 | BWF vs federation, or across federations | n/a: no connecting matches | n/a | 0% | **never:** `incompatible_pools` |
 
 ## 1. Rating-ready data
@@ -65,13 +65,16 @@ Notes on the data:
 
 ## 3. Results: BWF singles (test 2025-01-01 → 2026-07-05; 4,529 matches)
 
-| Model | Log loss (95% CI) | Brier | Accuracy | ECE | Predicted |
-|---|---|---|---|---|---|
-| Constant 0.5 | 0.693 | 0.250 | 50.0% | – | 4,353 |
-| Win rate (Beta-smoothed, log5) | 0.611 (0.600–0.621) | 0.211 | 66.7% | 0.045 | 4,313 |
-| Elo, default (K 32) | 0.562 (0.545–0.578) | 0.192 | 70.3% | 0.024 | 4,353 |
-| Elo, tuned (K 32; K 96 for a player's first 20 matches) | 0.550 (0.533–0.565) | 0.187 | 71.0% | 0.019 | 4,313 |
-| Glicko-2 (3-day periods, τ insensitive, RD₀ 250) | **0.548** (0.531–0.563) | **0.186** | **71.1%** | 0.021 | 4,313 |
+Every model is scored on the same 4,313 matches (95%). The other 216 have a player with no
+earlier day (206) or no connection (10).
+
+| Model | Log loss (95% CI) | Brier | Accuracy | ECE |
+|---|---|---|---|---|
+| Constant 0.5 | 0.693 | 0.250 | 50.0% | – |
+| Win rate (Beta-smoothed, log5) | 0.611 (0.600–0.621) | 0.211 | 66.7% | 0.045 |
+| Elo, default (K 32) | 0.561 (0.544–0.577) | 0.192 | 70.4% | 0.024 |
+| Elo, tuned (K 40; K 120 for a player's first 20 matches) | 0.550 (0.532–0.566) | 0.187 | 71.0% | 0.019 |
+| Glicko-2 (3-day periods, τ insensitive, RD₀ 250) | **0.548** (0.531–0.563) | **0.186** | **71.0%** | 0.022 |
 
 Paired log-loss differences, with 95% cluster-bootstrap intervals over the same matches. Below
 zero favours the first model:
@@ -79,48 +82,60 @@ zero favours the first model:
 | Comparison | Difference | Significant? |
 |---|---|---|
 | Glicko-2 − win rate | −0.063 (−0.071 to −0.054) | yes |
-| Glicko-2 − default Elo | −0.013 (−0.020 to −0.008) | yes |
-| Tuned Elo − default Elo | −0.012 (−0.017 to −0.007) | yes: tuning helped |
-| **Glicko-2 − tuned Elo** | **−0.002 (−0.005 to +0.002)** | **no: a tie** |
+| Glicko-2 − default Elo | −0.014 (−0.020 to −0.008) | yes |
+| Tuned Elo − default Elo | −0.012 (−0.018 to −0.006) | yes: tuning helped |
+| **Glicko-2 − tuned Elo** | **−0.002 (−0.005 to +0.001)** | **no: a tie** |
 
 - **Established vs provisional** (Glicko-2):
-  - established (both players ≥10 prior matches, 3,620 matches): 0.546, ECE 0.020;
-  - provisional (693 matches): 0.559, ECE 0.043.
+  - established (both players ≥10 prior matches, 3,620 matches): 0.546, ECE 0.022;
+  - provisional (693 matches): 0.558, ECE 0.044.
 - **By discipline:** WS is easier (0.498) than MS (0.591).
-- **Over time:** 2025 0.544, 2026 0.558; validation years 0.540–0.546. Stable.
+- **Over time:** 2025 0.543, 2026 0.559; validation years 0.540–0.546. Stable.
 - **Calibration (Glicko-2):** close at the extremes. The 0.5–0.7 forecasts are too confident:
-  - 0.6–0.7 bin: forecast 0.649, observed 0.589 (n = 555);
-  - 0.5–0.6 bin: forecast 0.548, observed 0.505.
-- **Sensitivities:**
+  - 0.6–0.7 bin: forecast 0.649, observed 0.584 (n = 551);
+  - 0.5–0.6 bin: forecast 0.548, observed 0.504.
+- **Sensitivities** (first read, before the fixes; BWF has no unlabelled rounds, so the leakage
+  bug did not reach these):
   - counting retirements as results: Glicko-2 0.552;
-  - without the 5 identity-flagged players: unchanged;
-  - replays are deterministic (identical output hashes).
+  - without the 5 identity-flagged players: unchanged (they have no test-period matches).
+- **Determinism:** replays are deterministic (identical output hashes).
 - **Not adopted, because validation rejected it:** inactivity decay (worse at every setting).
   Round-level vs day-level batching made no material difference.
 
 ## 4. Results: federations (test 2026-01-01 → 2026-11-08; 94,605 matches)
 
-| Model | Log loss (95% CI) | Accuracy | ECE | Predicted |
-|---|---|---|---|---|
-| Constant | 0.693 | 50% | – | 52,440 |
-| Win rate | 0.611 (0.604–0.618) | 65.2% | 0.037 | 52,440 |
-| Elo, default | 0.635 (0.630–0.640): **worse than win rate** | 65.5% | 0.082 | 52,440 |
-| Elo, tuned (K 64; K 192 for first 20) | 0.598 (0.588–0.608) | 66.9% | 0.042 | 52,440 |
-| Glicko-2 (1-day periods) | 0.588 (0.576–0.599) | 67.8% | 0.026 | 35,912 |
+Every model is scored on the same **35,912 matches (38%)**:
+- **52,113** have a player with no match on an earlier day: federation newcomers often play
+  several group matches on their first day, and none of those can be predicted;
+- **6,580** are between unconnected players.
 
-- **Coverage is the problem.** 31% of test matches involve a player with no prior match, and 13%
-  are between players with no chain of matches between them.
-  - Glicko-2 covers fewer matches: its daily periods hide same-day earlier results.
-  - On the 35,912 matches both predict, Glicko-2 beats tuned Elo by −0.009 (−0.014 to −0.004).
-- **Established players are fine:**
-  - Glicko-2 0.532 (n = 9,499);
-  - tuned Elo 0.553 (n = 10,688).
-- **Most predictions are provisional:**
-  - tuned Elo 0.610 (n = 41,752), barely better than the win rate (0.618).
-- **Calibration (tuned Elo) is poor at the low end:**
-  - 0.0–0.1 bin: forecast 0.061, observed 0.132;
-  - 0.1–0.2 bin: forecast 0.152, observed 0.252.
-  The direction matches the side-1 effect above.
+| Model | Log loss (95% CI) | Accuracy | ECE |
+|---|---|---|---|
+| Constant | 0.693 | 50% | – |
+| Win rate | 0.610 (0.600–0.619) | 66.2% | 0.030 |
+| Elo, default | 0.625 (0.618–0.631): **worse than win rate** (+0.015, +0.011 to +0.020) | 66.7% | 0.082 |
+| Elo, tuned (K 96; K 192 for first 10) | 0.592 (0.578–0.604) | 68.1% | 0.037 |
+| Glicko-2 (1-day periods) | **0.588** (0.576–0.599) | 67.8% | **0.026** |
+
+- **Tuned models beat the win rate, modestly:**
+  - Glicko-2 −0.021 (−0.026 to −0.017);
+  - tuned Elo −0.018 (−0.023 to −0.013).
+- **Glicko-2 vs tuned Elo:** a tie (−0.003, −0.008 to +0.002).
+- **Established players are fine:** Glicko-2 0.532 (n = 9,499).
+- **Most predictions are provisional:** 0.608 (n = 26,413), barely better than the win rate
+  (0.619).
+- **Calibration (Glicko-2):** low forecasts are too low:
+  - 0.0–0.1 bin: forecast 0.067, observed 0.105;
+  - 0.2–0.3 bin: forecast 0.252, observed 0.303.
+  The direction matches the side-1 effect (§10).
+- **By pool** (Glicko-2):
+
+  | Pool | Log loss |
+  |---|---|
+  | Adult MS | 0.613 |
+  | Adult WS | 0.595 |
+  | Junior MS | 0.570 |
+  | Junior WS | 0.564 |
 
 ## 5. Doubles (BWF, research only; test 5,895 matches)
 
@@ -129,13 +144,13 @@ zero favours the first model:
 | Constant | 0.693 | 50% | – | 0.693 |
 | Pair Elo (K 64) | 0.568 (0.551–0.584) | 70.6% | 0.019 | 0.675 |
 | Player-level team Elo (K 64) | 0.520 (0.505–0.535) | 74.2% | 0.013 | 0.536 |
-| **TrueSkill, two teams** (β 25/3, τ 0.5) | **0.512** (0.497–0.526) | **74.5%** | 0.015 | **0.520** |
+| **TrueSkill, two teams** (β 25/3, τ 0.5) | **0.512** (0.497–0.526) | **74.6%** | 0.016 | **0.521** |
 
-- **TrueSkill beats team Elo:** −0.008 (−0.011 to −0.006).
-- **Player-level models beat pair Elo:** −0.048 to −0.057.
+- **TrueSkill beats team Elo:** −0.008 (−0.011 to −0.005).
+- **Player-level models beat pair Elo:** −0.048 to −0.056.
 - **Partner changes:** pair-level models know nothing about a new partnership. Player-level models
   carry each player over, which is the decisive advantage.
-- **By discipline:** WD is easiest (0.465), then XD (0.514), then MD (0.552).
+- **By discipline:** WD is easiest (0.465), then XD (0.514), then MD (0.553).
 - **Not done:** federation doubles. Doubles identities are weaker, and the singles backtest took
   priority.
 
@@ -178,10 +193,12 @@ Derived tables only (migration 0023); match data is never changed:
 - `match_prediction`: pre-match only, the only thing scored.
 
 Rebuilds:
-- **Full rebuild is the default.** A full BWF replay takes under a second.
-- **Incremental rebuild** keeps predictions before the earliest changed day. Tests show it equals
-  a full rebuild after a correction, an insertion, a removal and an identity merge. On real data
-  (871 retirements added) the output hashes match.
+- **Full rebuild only.** A full BWF replay takes under a second, the federations a few seconds.
+- `affected_from` reports the earliest day a correction, insertion, removal or identity change
+  touches. Tests show predictions before that day are identical after a rebuild.
+- **No incremental rebuild.** The first version replayed everything and so saved nothing; the
+  review caught this and it was removed. A real one needs stored replay checkpoints, which are
+  not worth it at this size.
 
 ## 8. Answers
 
@@ -192,15 +209,15 @@ Rebuilds:
    doubles.
 3. **Best model:**
    - BWF singles: Glicko-2 and tuned Elo tie.
-   - Federations: Glicko-2 on what it covers; tuned Elo covers more.
+   - Federations: Glicko-2 and tuned Elo tie.
    - Doubles: TrueSkill.
    - The defaults are not good enough: default Elo loses to the win rate on federations.
 4. **Calibration:**
    - BWF: good overall (ECE 0.02), mid-range forecasts about 5 points too confident.
-   - Federations: poor at the extremes.
+   - Federations: low forecasts 4–8 points too low (ECE 0.026–0.037).
 5. **Newer players:**
    - BWF provisional: 0.559 vs 0.546 established.
-   - Federation provisional: barely better than the win rate.
+   - Federation provisional: 0.608, barely better than the win rate (0.619).
    - Not reliable enough to show a probability.
 6. **National pools:** not comparable with each other: zero connecting matches.
 7. **BWF and domestic ratings:** cannot be combined. There are no verified identity links; 0
@@ -208,7 +225,7 @@ Rebuilds:
 8. **Matchups without enough evidence:**
    - any cross-federation or BWF-vs-federation pair;
    - federation pairs in different islands (92% of player pairs);
-   - any match with a newcomer (31% of federation test matches).
+   - any match on a player's first day (55% of federation test matches).
 9. **Ready for public use?** Not yet (see Decision).
 10. **Highest-leverage improvements:**
     - (a) **Recalibrate** on validation (temperature or Platt scaling), then re-test. This is the
@@ -219,7 +236,8 @@ Rebuilds:
       tournament-scoped federation records.
     - (d) **More federation history:** the backfill now works, with Australia back to Dec 2022
       and New Zealand to Dec 2021.
-    - (e) **Same-day-aware Glicko-2,** to recover its lost coverage.
+    - (e) **Newcomers' first days.** Predict them from a prior (e.g. the event's grade) instead
+      of abstaining.
     - (f) **Test game-score margin.**
 
 ## 9. Public-use rules if the owner approves BWF singles
@@ -240,3 +258,38 @@ Rebuilds:
   legitimate pre-match signal) or a listing convention. Settle it before using it.
 - **Minors.** Juniors' ratings are research only. Publishing any rating of minors needs the
   owner's decision (ADR-0009/0010).
+
+## Review and the second test read
+
+An independent review of the M8 diff found ten issues; all were confirmed and fixed (`13d67f0`).
+
+**Four changed what the models see:**
+1. **Same-day leakage.** An unlabelled match was predicted after that day's labelled results were
+   applied. It is now predicted from the start of the day.
+   - BWF has no unlabelled rounds, so BWF results were not affected.
+   - 6,522 federation singles were.
+2. **Unfair batching comparison.** Abstentions depended on round vs day batching, so tuning
+   compared the two on different matches. That is also why the first federation Glicko-2 run
+   covered fewer matches. Abstentions are now decided from the start of the day for every model.
+3. **Glicko-2 inactivity cap.** Idle deviation was capped at 350, not at the starting deviation.
+4. **TrueSkill variance.** It was overwritten, not compounded, within a batch.
+
+**The others:**
+- Rating history mixed pools.
+- The "incremental" rebuild did no incremental work.
+- Event visibility did not follow reclassification, and the privacy allowlist reads German "MD"
+  as adult.
+- `scout privacy reclassify` could re-apply English codes.
+- Four commands did not refresh coverage.
+- The reclassification could exceed Postgres's bind-parameter limit.
+
+**What was done:**
+- All selections were redone on validation and committed (`7a756bc`) before the test splits were
+  read a second time. Federation Elo's optimum hit the K grid's edge (80), so 96 and 128 were added.
+- **The second read changed no conclusion:**
+  - BWF numbers moved by at most 0.001.
+  - Federation coverage fell from 55% to 38%: the first figure counted newcomers' later same-day
+    matches.
+  - Federation Glicko-2 vs tuned Elo moved from a small significant win to a tie.
+- **The cost:** the test periods are no longer untouched. These are the definitive M8 results;
+  any later model change should be judged on a new period (data after 2026-11-14).
