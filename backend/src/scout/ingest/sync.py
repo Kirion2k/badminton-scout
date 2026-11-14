@@ -282,4 +282,7 @@ def _finish(session: Session, run: SyncRun, counts: Counter[str]) -> SyncRun:
     run.counts = dict(counts)
     run.finished_at = datetime.now(UTC)
     session.commit()
+    from scout.summary import refresh_quietly
+
+    refresh_quietly(session)  # coverage counts follow every pass
     return run

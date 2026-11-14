@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, Select, exists, func, literal, or_, select
+from sqlalchemy import ColumnElement, Select, exists, func, literal, or_, select, text
 from sqlalchemy.orm import Session
 
 import scout.privacy
@@ -274,6 +274,7 @@ class Coverage(BaseModel):
     public_tournaments: int  # across providers
     public_matches: int
     public_players: int  # distinct people, not summed per provider
+    counts_as_of: datetime | None  # when the counts were computed (scout.summary); None: never
     last_retrieved_at: datetime | None
     last_sync_at: datetime | None  # latest scheduled pass that finished (succeeded or incomplete)
     next_sync_at: datetime | None  # set by the scheduler; None = never scheduled; past = overdue
@@ -1077,38 +1078,23 @@ def coverage(db: DB) -> Coverage:
         rows: list[Any] = list(db.execute(query).all())
         return {r[0]: tuple(r[1:]) if len(r) > 2 else r[1] for r in rows}
 
-    by_match = (
-        select(Tournament.source_id)
-        .join(Event, Event.tournament_id == Tournament.id)
-        .join(Match, Match.event_id == Event.id)
-    )
-    stored = per_source(by_match.add_columns(func.count(Match.id)).group_by(Tournament.source_id))
-    public = per_source(
-        by_match.add_columns(
-            func.count(func.distinct(Tournament.id)),
-            func.count(Match.id),
-            func.min(Match.played_on),
-            func.max(Match.played_on),
+    # counts come precomputed (scout.summary): counting live took seconds at 400k matches
+    summary = {
+        r.source_id: r
+        for r in db.execute(
+            text(
+                "select source_id, stored_matches, public_tournaments, public_matches,"
+                " first_played, last_played, public_players, computed_at from coverage_summary"
+            )
         )
-        .where(Event.redistributable)  # what _visible_matches() serves, on the joined event
-        .group_by(Tournament.source_id)
-    )
-    people = (
-        select(Tournament.source_id, PlayerLink.player_id)
-        .join(Event, Event.tournament_id == Tournament.id)
-        .join(Match, Match.event_id == Event.id)
-        .join(MatchSide, MatchSide.match_id == Match.id)
-        .join(MatchSidePlayer, MatchSidePlayer.match_side_id == MatchSide.id)
-        .join(PlayerLink, PlayerLink.source_player_id == MatchSidePlayer.source_player_id)
-        .where(Event.redistributable)  # what _visible_matches() serves, on the joined event
-        .distinct()
-        .subquery()
-    )
-    # one scan for both counts: players per source, and distinct players over all sources
-    by_source: dict[str, set[int]] = defaultdict(set)
-    for sid, pid in db.execute(select(people.c.source_id, people.c.player_id)):
-        by_source[sid].add(pid)
-    players = {sid: len(ids) for sid, ids in by_source.items()}
+    }
+    stored = {sid: r.stored_matches for sid, r in summary.items()}
+    public = {
+        sid: (r.public_tournaments, r.public_matches, r.first_played, r.last_played)
+        for sid, r in summary.items()
+    }
+    players = {sid: r.public_players for sid, r in summary.items()}
+    counts_as_of = summary["*"].computed_at if "*" in summary else None
     discovered = per_source(
         select(TournamentDiscovery.owner_source, func.count())
         .where(TournamentDiscovery.owner_source.is_not(None))
@@ -1183,7 +1169,6 @@ def coverage(db: DB) -> Coverage:
                 last_sync_status=syncs[sid].status if sid in syncs else None,
             )
         )
-    distinct_players = len(set[int]().union(*by_source.values()))
     return Coverage(
         providers=providers,
         last_sync_at=finished,
@@ -1198,9 +1183,10 @@ def coverage(db: DB) -> Coverage:
             "Events whose category cannot be recognised as adult are withheld until classified.",
         ],
         # over every served record, not only the providers listed above
-        public_tournaments=sum(t for t, *_ in public.values()),
-        public_matches=sum(m for _, m, *_ in public.values()),
-        public_players=distinct_players,
+        public_tournaments=sum(t for sid, (t, *_) in public.items() if sid != "*"),
+        public_matches=sum(m for sid, (_, m, *_) in public.items() if sid != "*"),
+        public_players=players.get("*", 0),
+        counts_as_of=counts_as_of,
         last_retrieved_at=max(
             (p.last_retrieved_at for p in providers if p.last_retrieved_at), default=None
         ),

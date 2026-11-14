@@ -636,6 +636,9 @@ def _reclassify() -> int:
                 e.redistributable = allowed
                 changed["now served" if allowed else "now private"] += 1
         s.commit()
+        from scout.summary import refresh_quietly
+
+        refresh_quietly(s)
     print(f"events reclassified: {dict(changed) or 'none changed'}")
     return 0
 
@@ -654,6 +657,9 @@ def _events(args: argparse.Namespace) -> int:
             s.rollback()
         else:
             s.commit()
+            from scout.summary import refresh_quietly
+
+            refresh_quietly(s)
     for key, n in sorted(counts.items()):
         if not key.startswith("events "):
             print(f"{key}: {n}")
@@ -715,6 +721,10 @@ def _identity(args: argparse.Namespace) -> int:
                 d = identity.undo(s, args.id, args.reason, who)
                 s.commit()
                 print(f"undone: decision {d.id}")
+            if args.action != "candidates":  # links, merges and undos change player counts
+                from scout.summary import refresh_quietly
+
+                refresh_quietly(s)
         except ValueError as e:
             print(e, file=sys.stderr)
             return 1
@@ -749,6 +759,9 @@ def _import_compilation(args: argparse.Namespace) -> int:
             run.status, run.counts = "succeeded", dict(counts)
             run.finished_at = datetime.now(UTC)
             s.commit()
+            from scout.summary import refresh_quietly
+
+            refresh_quietly(s)
     print(f"{'DRY RUN (rolled back): ' if args.dry_run else ''}{len(rows)} rows")
     for k, v in sorted(counts.items()):
         print(f"  {k}: {v}")

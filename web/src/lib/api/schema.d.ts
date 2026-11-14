@@ -231,6 +231,8 @@ export interface components {
     Coverage: {
       /** Awaiting Import */
       awaiting_import: number;
+      /** Counts As Of */
+      counts_as_of: string | null;
       /** Excluded */
       excluded: string[];
       /** Last Retrieved At */

@@ -23,6 +23,7 @@ from scout.models import (
     SourcePlayer,
     Tournament,
 )
+from scout.summary import refresh
 
 from .ts_fixtures import DOUBLES, WALKOVER, row
 
@@ -58,6 +59,7 @@ def data(session: Session) -> Session:
     rows = [row(), DOUBLES, WALKOVER, JUNIOR, MIXED_AGE, JUNIOR_ONLY_TOURNAMENT]
     items = [TsMatchRow.model_validate(r) for r in rows]
     ingest_rows(session, run, date(2026, 1, 5), items, rows)
+    refresh(session, concurrently=False)  # coverage counts, as a sync pass would leave them
     return session
 
 
@@ -239,7 +241,7 @@ async def test_match_filters(api: httpx.AsyncClient, data: Session) -> None:
 async def test_coverage_counts_only_served_data(api: httpx.AsyncClient, data: Session) -> None:
     # move the fixture under a listed provider, so its counts are the ones under test
     data.execute(update(Tournament).values(source_id="tournamentsoftware_ba"))
-    data.flush()
+    refresh(data, concurrently=False)
     body = (await api.get("/v1/coverage")).json()
     ba = next(p for p in body["providers"] if p["source_id"] == "tournamentsoftware_ba")
     # served: MS singles, XD doubles, the walkover. Not the U11, U17 or U13 junior matches
@@ -434,9 +436,23 @@ async def test_a_file_archive_is_listed_as_an_archive_never_as_connected(
     body = (await api.get("/v1/coverage")).json()
     assert status() == "pending_access"  # listed before anything is imported
     data.execute(update(Tournament).values(source_id="bwf_historical_compilation"))
-    data.flush()
+    refresh(data, concurrently=False)
     body = (await api.get("/v1/coverage")).json()
     assert status() == "historical_archive"
+
+
+async def test_coverage_counts_are_precomputed_and_say_when(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    body = (await api.get("/v1/coverage")).json()
+    assert body["public_matches"] == 3 and body["counts_as_of"] is not None
+    m = data.scalars(select(Match)).first()
+    assert m is not None
+    data.delete(m)
+    data.flush()
+    assert (await api.get("/v1/coverage")).json()["public_matches"] == 3  # not yet recounted
+    refresh(data)  # what the end of every sync pass and data-changing command does
+    assert (await api.get("/v1/coverage")).json()["public_matches"] == 2
 
 
 async def test_head_to_head_counts_meetings_and_wins_from_a_side(

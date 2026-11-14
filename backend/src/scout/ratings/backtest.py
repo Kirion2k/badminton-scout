@@ -199,13 +199,17 @@ def validation_log_loss(preds: Sequence[Prediction], splits: Splits) -> float:
 
 
 # Tuning grids (ADR-0012): small on purpose. Each is scored on validation only. Widened once
-# (2026-11-14) after the first BWF pass put the Elo optimum at the grid's edge (K 48, 2x).
+# (2026-11-14) after the first BWF pass put the Elo optimum at the grid's edge (K 48, 2x), and
+# again for the federations (win-rate prior 1, provisional 3x). BWF was selected on the second
+# grid (docs/research/m8-bwf-selected.json); a 1-day Glicko-2 period is the floor, not an edge.
+# provisional K as a multiple of K, and for how many matches
+_PROVISIONAL = ((1.5, 10), (2, 10), (2, 20), (3, 20), (4, 20), (3, 40))
 GRIDS: dict[str, list[dict[str, Any]]] = {
-    "winrate": [{"prior": a} for a in (1.0, 2.0, 5.0, 10.0)],
+    "winrate": [{"prior": a} for a in (0.25, 0.5, 1.0, 2.0, 5.0, 10.0)],
     "elo": [
         {"k": k, "provisional_k": pk, "provisional_n": pn, "decay_per_year": d}
         for k in (16.0, 24.0, 32.0, 40.0, 48.0, 64.0, 80.0)
-        for pk, pn in ((None, 0), (k * 1.5, 10), (k * 2, 10), (k * 2, 20), (k * 3, 20))
+        for pk, pn in [(None, 0), *((k * x, n) for x, n in _PROVISIONAL)]
         for d in (0.0, 0.1, 0.25)
     ],
     "glicko2": [
