@@ -5,6 +5,7 @@ condition of ADR-0013 at once, including both flags below; until the prospective
 passed, RELEASE_EVIDENCE is None and no probability can be produced, whatever the flags say.
 """
 
+import math
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
@@ -19,6 +20,7 @@ PUBLIC_RATINGS = False  # BWF singles rating numbers, labelled as Mynton estimat
 # None until ADR-0013's release conditions are met; a probability is impossible without it.
 RELEASE_EVIDENCE: dict[str, Any] | None = None
 ESTABLISHED_AT = 10  # prior matches (ADR-0006)
+_SCALE = 173.7178  # Glicko-2's rating scale
 
 Outcome = Literal[
     "probability",  # validated: P(a beats b), within a validated pool and calibration range
@@ -49,8 +51,9 @@ class ModelInfo(BaseModel):
 
 
 class Calibration(BaseModel):
-    """How such forecasts did in the held-out test period: the reliability bin this forecast
-    falls in, so the number comes with its track record."""
+    """How such forecasts did in the prospective evaluation, from the favourite's side: of the
+    forecasts that gave the favourite between `bin_lo` and `bin_hi`, the favourite won
+    `observed_rate`."""
 
     bin_lo: float
     bin_hi: float
@@ -99,6 +102,7 @@ class Rated:
     last_played: date
     component: int
     identity_flagged: bool
+    vol: float = 0.06
 
 
 @dataclass(frozen=True)
@@ -119,6 +123,8 @@ class Served:
     data_as_of: date
     computed_at: datetime
     temperature: float = 1.0
+    period_days: int = 3  # the rating period: uncertainty grows once per idle period
+    max_rd: float = 350.0  # and never beyond a newcomer's (ADR-0012 review fix)
 
 
 def _evidence(s: Standing, pool: str, show: bool) -> Evidence:
@@ -152,13 +158,37 @@ def blocker(a: Rated, b: Rated, discipline: str) -> tuple[Outcome, str] | None:
     return None
 
 
-def probability(a: Rated, b: Rated, served: Served) -> float:
-    """P(a beats b): the Glicko-2 expectation with the served calibration. Odd in the players."""
+def deviation_on(r: Rated, served: Served, on: date) -> float:
+    """The rating deviation grown for every rating period between the ratings' data and `on`,
+    as the backtest grew it up to each match (Glicko-2 step 6, capped like the replay)."""
+    rd = r.rd or served.max_rd
+    idle = max(0, (on - served.data_as_of).days // served.period_days)
+    grown = math.sqrt((rd / _SCALE) ** 2 + idle * r.vol**2) * _SCALE
+    return min(grown, served.max_rd)
+
+
+def probability(a: Rated, b: Rated, served: Served, on: date) -> float:
+    """P(a beats b) for a match on `on`: the Glicko-2 expectation with grown deviations and the
+    served calibration. Odd in the players: swapping them gives exactly 1 - p."""
     from scout.analytics.calibration import with_temperature
     from scout.analytics.models import glicko2_expected
 
-    raw = glicko2_expected(a.rating, a.rd or 350.0, b.rating, b.rd or 350.0)
+    raw = glicko2_expected(
+        a.rating, deviation_on(a, served, on), b.rating, deviation_on(b, served, on)
+    )
     return with_temperature(raw, served.temperature)
+
+
+def track_record(p: float, evidence: dict[str, Any]) -> Calibration | None:
+    """How earlier forecasts at this level did, from the favourite's side, so the record is the
+    same whichever player is A. None when no validated bin holds the forecast."""
+    q = max(p, 1 - p)
+    for b in evidence["favourite_reliability"]:
+        if b["lo"] <= q < b["hi"] or (q == 1.0 and b["hi"] == 1.0):
+            return Calibration(bin_lo=b["lo"], bin_hi=b["hi"], forecasts=b["n"],
+                               observed_rate=b["observed"],
+                               test_log_loss=evidence["log_loss"]["mean"])  # fmt: skip
+    return None
 
 
 def decide(
@@ -168,6 +198,7 @@ def decide(
     served: Served | None,
     *,
     head_to_head: tuple[int, int] | None = None,
+    on: date | None = None,
     public_probabilities: bool | None = None,
     public_ratings: bool | None = None,
     release_evidence: dict[str, Any] | None = None,
@@ -202,14 +233,13 @@ def decide(
     if not show_p or evidence is None:
         return out("comparison", "Mynton does not publish win probabilities yet: the model is "
                    "still being evaluated on new results.")  # fmt: skip
-    p = probability(a.bwf, b.bwf, served)
-    bins: list[dict[str, Any]] = evidence["reliability"]
-    hit = next(x for x in bins if x["lo"] <= p < x["hi"] or (p == 1.0 and x["hi"] == 1.0))
+    p = probability(a.bwf, b.bwf, served, on or served.data_as_of)
+    record = track_record(p, evidence)
+    if record is None:
+        return out("comparison", "This forecast falls outside the range Mynton has validated.")
     return Matchup(
         outcome="probability", discipline=discipline, ratings_shown=shown, data_as_of=as_of,
-        a=ea, b=eb, head_to_head=head_to_head, probability_a=round(p, 4),
-        calibration=Calibration(bin_lo=hit["lo"], bin_hi=hit["hi"], forecasts=hit["n"],
-                                observed_rate=hit["observed"], test_log_loss=evidence["log_loss"]),
+        a=ea, b=eb, head_to_head=head_to_head, probability_a=round(p, 4), calibration=record,
         model=ModelInfo(name="glicko2", version=served.version, run_id=served.run_id,
                         snapshot_id=served.snapshot_id, data_as_of=served.data_as_of,
                         computed_at=served.computed_at),

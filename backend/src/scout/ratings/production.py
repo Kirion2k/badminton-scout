@@ -11,36 +11,31 @@ from typing import Any
 from sqlalchemy import Engine, insert, select
 from sqlalchemy.orm import Session
 
+from scout import matchups
 from scout.analytics.graph import UnionFind
 from scout.analytics.models import Glicko2, Glicko2Config
 from scout.analytics.replay import Prediction, replay
-from scout.models import RatingCurrent, RatingSnapshot
+from scout.models import RatingCurrent, RatingModel, RatingRun, RatingSnapshot
 from scout.ratings import backtest as bt
 from scout.ratings.audit import identity
-from scout.ratings.dataset import load, snapshot
+from scout.ratings.dataset import Row, load, snapshot
 from scout.ratings.store import save_run
 
 POOLS = ("bwf:MS", "bwf:WS")
 
 
-def rebuild(engine: Engine, selection: Path, calibration: Path) -> int:
-    """Returns the new run id. A full rebuild every time (seconds at this size)."""
-    sel = json.loads(selection.read_text())["glicko2"]
-    cal = json.loads(calibration.read_text())
-    chosen = cal["final"][cal["selected"]]
-    config, by_round = sel["config"], sel["by_round"]
-    sid = snapshot(engine, "bwf")
-    with engine.connect() as c:
-        flagged = identity(c).flagged
-    with Session(engine) as s:
-        snap = s.get(RatingSnapshot, sid)
-        if snap is None:
-            raise RuntimeError(f"snapshot {sid} vanished")
-        rows_by_pool = {pool: load(s, sid, pool) for pool in POOLS}
-    as_of = max(r.day for rows in rows_by_pool.values() for r in rows)
+def replay_current(
+    rows_by_pool: dict[str, list[Row]],
+    config: dict[str, Any],
+    by_round: bool,
+    flagged: set[int],
+    as_of: date,
+) -> tuple[list[Prediction], list[dict[str, Any]]]:
+    """Pure: every pool's predictions, and each player's rating after the last period, with
+    match count, last day, connected component (numbered per pool) and identity flag."""
     current: list[dict[str, Any]] = []
     preds: list[Prediction] = []
-    for pool, rows in rows_by_pool.items():
+    for pool, rows in sorted(rows_by_pool.items()):
         model = Glicko2(Glicko2Config(**config))
         preds += replay(model, bt.scored(rows), by_round=by_round)
         model.at(as_of + timedelta(days=model.config.period_days))  # close the last period
@@ -61,6 +56,25 @@ def rebuild(engine: Engine, selection: Path, calibration: Path) -> int:
                 "component": roots.setdefault(graph.find(p), len(roots)),
                 "identity_flagged": p in flagged,
             })  # fmt: skip
+    return preds, current
+
+
+def rebuild(engine: Engine, selection: Path, calibration: Path) -> int:
+    """Returns the new run id. A full rebuild every time (seconds at this size)."""
+    sel = json.loads(selection.read_text())["glicko2"]
+    cal = json.loads(calibration.read_text())
+    chosen = cal["final"][cal["selected"]]
+    config, by_round = sel["config"], sel["by_round"]
+    sid = snapshot(engine, "bwf")
+    with engine.connect() as c:
+        flagged = identity(c).flagged
+    with Session(engine) as s:
+        snap = s.get(RatingSnapshot, sid)
+        if snap is None:
+            raise RuntimeError(f"snapshot {sid} vanished")
+        rows_by_pool = {pool: load(s, sid, pool) for pool in POOLS}
+    as_of = max(r.day for rows in rows_by_pool.values() for r in rows)
+    preds, current = replay_current(rows_by_pool, config, by_round, flagged, as_of)
     with Session(engine) as s, s.begin():
         run_id = save_run(
             s, name="glicko2", config={**config, "by_round": by_round}, snapshot_id=sid,
@@ -75,10 +89,24 @@ def rebuild(engine: Engine, selection: Path, calibration: Path) -> int:
     return run_id
 
 
+def served(session: Session) -> matchups.Served | None:
+    """The newest served run, as the route and prospective forecasts both read it."""
+    run_id = latest_run(session)
+    run = session.get(RatingRun, run_id) if run_id else None
+    model = session.get(RatingModel, run.model_id) if run else None
+    if run is None or model is None or run.finished_at is None:
+        return None
+    initial = float(model.config.get("initial_rd", 350.0))
+    return matchups.Served(
+        run_id=run.id, snapshot_id=run.snapshot_id, version=model.config_hash,
+        data_as_of=date.fromisoformat(run.metrics["data_as_of"]), computed_at=run.finished_at,
+        temperature=float(run.metrics.get("calibration", {}).get("temperature", 1.0)),
+        period_days=int(model.config.get("period_days", 3)), max_rd=min(initial, 350.0),
+    )  # fmt: skip
+
+
 def latest_run(session: Session) -> int | None:
     """The newest full BWF run with stored current ratings: the only one the route reads."""
-    from scout.models import RatingRun
-
     return session.scalar(
         select(RatingRun.id)
         .where(

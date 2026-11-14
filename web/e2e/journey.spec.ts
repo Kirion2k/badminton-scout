@@ -292,3 +292,17 @@ test("matchup: pick two players, compare results, never a percentage", async ({
     matchup.getByText("Not enough results to compare"),
   ).toBeVisible();
 });
+
+test("matchup: a merged player's old id stays on the matchup page", async ({
+  page,
+}) => {
+  const { jordanMergedFrom, jordan, alex } = ids();
+  await page.goto(`/compare?a=${jordanMergedFrom}&discipline=WS`);
+  await expect(page).toHaveURL(
+    new RegExp(`/compare\\?discipline=WS&a=${jordan}$`),
+  );
+  await page.goto(`/compare?a=${jordanMergedFrom}&b=${alex}&discipline=MS`);
+  await expect(page).toHaveURL(
+    new RegExp(`/compare\\?a=${jordan}&b=${alex}&discipline=MS$`),
+  );
+});

@@ -70,7 +70,31 @@ async function get<T>(path: string, query?: Query): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** The canonical id for a (possibly merged) player, without leaving the current page: a merged
+ * id answers 308 to its canonical profile. Unknown or withheld players are not found. */
+async function canonicalPlayer(id: number): Promise<number> {
+  let response: Response;
+  try {
+    response = await fetch(url(`/v1/players/${id}`), {
+      cache: "no-store",
+      redirect: "manual",
+    });
+  } catch {
+    throw new ApiError(503, `/v1/players/${id}`);
+  }
+  if (response.status === 404) notFound();
+  if (response.status === 308) {
+    const target = (response.headers.get("location") ?? "").match(
+      /\/v1\/players\/(\d+)/,
+    );
+    if (target) return Number(target[1]);
+  }
+  if (!response.ok) throw new ApiError(response.status, `/v1/players/${id}`);
+  return id;
+}
+
 export const api = {
+  canonicalPlayer,
   searchPlayers: (q: string, limit = 20) =>
     get<PlayerHit[]>("/v1/players", { q, limit }),
   profile: (id: number) => get<PlayerProfile>(`/v1/players/${id}`),

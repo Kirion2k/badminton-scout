@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -537,6 +538,17 @@ class IssuedPrediction(Base):
     or deleting it; the result columns are filled once."""
 
     __tablename__ = "issued_prediction"
+    __table_args__ = (
+        # one forecast per match: the same two players in either order, discipline and day
+        Index(
+            "ux_issued_prediction_match",
+            "discipline",
+            text("least(player_a, player_b)"),
+            text("greatest(player_a, player_b)"),
+            "scheduled_on",
+            unique=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     issued_at: Mapped[datetime] = mapped_column(server_default=func.now())

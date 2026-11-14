@@ -619,3 +619,18 @@ async def test_no_route_but_the_gated_matchup_can_carry_a_rating(api: httpx.Asyn
         if any(w == prop or prop.startswith(f"{w}_") for w in words)
     }  # fmt: skip
     assert carrying == {"Evidence", "Matchup"}
+
+
+async def test_matchup_never_uses_a_rating_from_before_a_merge(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    alex, sam = player_id(data, "Alex TESTER"), player_id(data, "Sam EXAMPLE")
+    lee = data.get(Player, player_id(data, "Lee PLACEHOLDER"))
+    assert lee is not None
+    serve_ratings(data, {alex: 40, sam: 40, lee.id: 40})
+    before = (await api.get("/v1/matchups/compare", params={"a": alex, "b": sam})).json()
+    assert before["outcome"] == "comparison"
+    lee.merged_into_id = sam  # identity changed after the ratings were built
+    data.flush()
+    after = (await api.get("/v1/matchups/compare", params={"a": alex, "b": sam})).json()
+    assert after["outcome"] == "identity_uncertain"

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { EmptyState, RowsSkeleton, Section } from "@/components/bits";
@@ -50,10 +50,9 @@ async function Compare({
   if (a && b && a === b) notFound();
   if (!a) return <Pick which="a" d={d} q={one(s.qa)?.trim() ?? ""} />;
   if (!b) return <Pick which="b" d={d} q={one(s.qb)?.trim() ?? ""} a={a} />;
-  const [m, h] = await Promise.all([
-    api.matchup(a, b, d),
-    api.headToHead(a, b),
-  ]);
+  // the matchup first: for a merged id its redirect keeps this page and the discipline
+  const m = await api.matchup(a, b, d);
+  const h = await api.headToHead(a, b);
   return <View m={m} h={h} d={d} />;
 }
 
@@ -68,6 +67,10 @@ async function Pick({
   q: string;
   a?: number;
 }) {
+  if (a) {
+    const canonical = await api.canonicalPlayer(a); // a merged id: stay on this page
+    if (canonical !== a) permanentRedirect(href({ a: canonical, d }));
+  }
   const first = a ? await api.profile(a) : undefined;
   const hits =
     q.length >= 2 ? (await api.searchPlayers(q)).filter((h) => h.id !== a) : [];
@@ -303,10 +306,12 @@ function View({ m, h, d }: { m: Matchup; h: HeadToHead; d: Discipline }) {
                 style, tactics or fitness.
               </li>
               <li>Mynton figures are not BWF world rankings.</li>
-              <li>
-                BWF results come from a historical compilation that ends in July
-                2026.
-              </li>
+              {m.data_as_of && (
+                <li>
+                  BWF results come from a historical compilation that ends on{" "}
+                  {formatDate(m.data_as_of)}.
+                </li>
+              )}
             </ul>
           </Section>
         </aside>
@@ -333,24 +338,26 @@ function Status({ m, names }: { m: Matchup; names: [string, string] }) {
         </ul>
       )}
       {m.ratings_shown && m.a && m.b && (
-        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[14px]">
-          {[m.a, m.b].map((e, i) => (
-            <div key={e.player_id} className="contents">
-              <dt className="font-semibold">{names[i]}</dt>
-              <dd className="num">
-                Mynton estimate {e.rating?.toFixed(0)}
-                {e.rating_deviation
-                  ? ` ± ${e.rating_deviation.toFixed(0)}`
-                  : ""}{" "}
-                · {e.prior_matches} matches
-                {e.provisional ? " (provisional)" : ""}
-              </dd>
-            </div>
-          ))}
-          <p className="col-span-2 mt-1 text-[12px] text-subtle">
+        <>
+          <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[14px]">
+            {[m.a, m.b].map((e, i) => (
+              <div key={e.player_id} className="contents">
+                <dt className="font-semibold">{names[i]}</dt>
+                <dd className="num">
+                  Mynton estimate {e.rating?.toFixed(0)}
+                  {e.rating_deviation
+                    ? ` ± ${e.rating_deviation.toFixed(0)}`
+                    : ""}{" "}
+                  · {e.prior_matches} matches
+                  {e.provisional ? " (provisional)" : ""}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-1 text-[12px] text-subtle">
             A Mynton estimate from BWF results, not a BWF ranking.
           </p>
-        </dl>
+        </>
       )}
     </div>
   );
@@ -367,8 +374,8 @@ function Probability({ m, names }: { m: Matchup; names: [string, string] }) {
       </p>
       {c && (
         <p className="mt-1 text-muted-foreground">
-          Of {c.forecasts} earlier forecasts between{" "}
-          {Math.round(c.bin_lo * 100)}% and {Math.round(c.bin_hi * 100)}%, the
+          Of {c.forecasts} earlier forecasts that gave the favourite{" "}
+          {Math.round(c.bin_lo * 100)}–{Math.round(c.bin_hi * 100)}%, the
           favourite won {Math.round(c.observed_rate * 100)}%.
         </p>
       )}

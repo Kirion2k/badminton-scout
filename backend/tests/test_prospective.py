@@ -1,6 +1,6 @@
 """Prospective forecasts (ADR-0013): recorded before the match, immutable, scored after."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select, text, update
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from scout.models import (
     IssuedPrediction,
+    Match,
     Player,
     RatingCurrent,
     RatingModel,
@@ -20,6 +21,7 @@ from scout.ratings import prospective
 from tests.test_api_v1 import data, player_id  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 pytestmark = pytest.mark.db
+SOON = datetime.now(UTC).date() + timedelta(days=10)  # forecasts are only for future matches
 
 
 def served(session: Session, players: dict[int, int], as_of: str = "2025-12-31") -> int:
@@ -52,10 +54,14 @@ def test_a_forecast_is_issued_only_for_an_eligible_future_match(
 ) -> None:
     alex, sam = ids["alex"], ids["sam"]
     served(session, {alex: 40, sam: 40})
-    with pytest.raises(prospective.NotEligible, match="after the ratings"):
-        prospective.issue(session, alex, sam, "MS", date(2025, 12, 31), "too early")
-    f = prospective.issue(session, alex, sam, "MS", date(2026, 1, 5), "Synthetic Open R16")
+    for past in (date(2025, 12, 31), date(2026, 1, 5), datetime.now(UTC).date()):
+        with pytest.raises(prospective.NotEligible, match="after today"):
+            prospective.issue(session, alex, sam, "MS", past, "a played or same-day match")
+    f = prospective.issue(session, alex, sam, "MS", SOON, "Synthetic Open R16")
     assert 0.5 < f.p_a < 1 and f.config_hash == "cfg" and f.snapshot_hash == "h"
+    for a, b in ((alex, sam), (sam, alex)):  # the same match, in either order
+        with pytest.raises(prospective.NotEligible, match="already covers"):
+            prospective.issue(session, a, b, "MS", SOON, "again")
 
 
 def test_provisional_or_unrated_players_get_no_forecast(
@@ -63,16 +69,16 @@ def test_provisional_or_unrated_players_get_no_forecast(
 ) -> None:
     served(session, {ids["alex"]: 40, ids["sam"]: 4})
     with pytest.raises(prospective.NotEligible, match="fewer than 10"):
-        prospective.issue(session, ids["alex"], ids["sam"], "MS", date(2026, 1, 5), "x")
+        prospective.issue(session, ids["alex"], ids["sam"], "MS", SOON, "x")
     with pytest.raises(prospective.NotEligible, match="no bwf:MS rating"):
-        prospective.issue(session, ids["alex"], ids["kim"], "MS", date(2026, 1, 5), "x")
+        prospective.issue(session, ids["alex"], ids["kim"], "MS", SOON, "x")
 
 
 def test_an_issued_forecast_cannot_be_changed_or_deleted(
     session: Session, ids: dict[str, int]
 ) -> None:
     served(session, {ids["alex"]: 40, ids["sam"]: 40})
-    f = prospective.issue(session, ids["alex"], ids["sam"], "MS", date(2026, 1, 5), "x")
+    f = prospective.issue(session, ids["alex"], ids["sam"], "MS", SOON, "x")
     for change in ({"p_a": 0.99}, {"player_b": ids["kim"]}, {"scheduled_on": date(2026, 2, 1)}):
         with pytest.raises(DBAPIError, match="cannot be changed"), session.begin_nested():
             session.execute(update(IssuedPrediction).where(IssuedPrediction.id == f.id)
@@ -105,9 +111,16 @@ def test_resolve_and_score_against_verified_bwf_results(
                     where ms2.match_id = m.id and ms2.side <> ms.side and pl2.player_id = :b)"""),
         {"a": alex, "b": sam},
     ).one()
-    match_id, when, winner, alex_side = meeting
-    # a forecast for a match in a federation source is never resolved: only BWF results count
-    prospective.issue(session, alex, sam, "MS", when, "Synthetic Open")
+    match_id, _, winner, alex_side = meeting
+    prospective.issue(session, alex, sam, "MS", SOON, "Synthetic Open")
+    session.execute(update(Tournament).values(source_id="bwf_historical_compilation"))
+    # a result dated before the forecast was made never resolves it
+    session.execute(update(Match).where(Match.id == match_id).values(
+        played_on=datetime.now(UTC).date() - timedelta(days=1)))  # fmt: skip
+    assert prospective.resolve(session, "test")["resolved"] == 0
+    session.execute(update(Match).where(Match.id == match_id).values(played_on=SOON))
+    session.execute(update(Tournament).values(source_id="tournamentsoftware_ba"))
+    # a result from a federation source is never used: only verified BWF results count
     assert prospective.resolve(session, "test")["resolved"] == 0
     session.execute(update(Tournament).values(source_id="bwf_historical_compilation"))
     assert prospective.resolve(session, "test") == {"resolved": 1, "no_result_yet": 0,

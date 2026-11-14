@@ -12,11 +12,11 @@ from sqlalchemy import Engine, text
 
 from scout.analytics import metrics
 from scout.analytics.calibration import Calibrator, fit_temperature
+from scout.matchups import ESTABLISHED_AT
 
 DEV_START = date(2012, 1, 1)  # 2007-2011: warm-up, most ratings immature
 DEV_END = date(2024, 12, 31)  # 2025 on was read twice in M8: never fitted on (ADR-0013)
 FOLD_YEARS = range(2016, 2025)
-ESTABLISHED_AT = 10
 
 
 class ExaminedPeriod(Exception):
@@ -119,6 +119,8 @@ def folds(dev: Sequence[Forecast]) -> dict[str, Any]:
     for year in FOLD_YEARS:
         train = [f for f in dev if f.day.year < year]
         held = [f for f in dev if f.day.year == year]
+        if not train or not held:
+            continue  # a year with no forecasts says nothing
         losses: dict[str, list[float]] = {}
         for kind in CANDIDATES:
             c = fit(kind, train)

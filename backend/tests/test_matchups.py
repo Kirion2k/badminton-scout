@@ -1,6 +1,6 @@
 """The matchup contract (docs/specs/matchups.md): what may and may not carry a probability."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -16,6 +16,7 @@ from scout.matchups import (
     Served,
     Standing,
     decide,
+    probability,
 )
 
 
@@ -74,9 +75,13 @@ def test_outcomes_without_a_probability() -> None:
 D = date(2026, 7, 5)
 SERVED = Served(run_id=1, snapshot_id=1, version="abc", data_as_of=D,
                 computed_at=datetime(2026, 11, 15, tzinfo=UTC))  # fmt: skip
-EVIDENCE = {"log_loss": 0.55, "reliability": [
-    {"lo": i / 10, "hi": (i + 1) / 10, "n": 300, "observed": i / 10 + 0.05} for i in range(10)
-]}  # fmt: skip
+EVIDENCE: dict[str, Any] = {
+    "log_loss": {"mean": 0.55, "lo": 0.53, "hi": 0.57},
+    "favourite_reliability": [
+        {"lo": i / 10, "hi": (i + 1) / 10, "n": 300, "observed": i / 10 + 0.05}
+        for i in range(5, 10)
+    ],
+}
 
 
 def st(
@@ -125,8 +130,10 @@ def test_a_probability_needs_everything_and_is_symmetric() -> None:
     assert ab.probability_a and ba.probability_a
     assert ab.probability_a + ba.probability_a == pytest.approx(1, abs=2e-4)  # 4-place rounding
     assert ab.probability_a > 0.5 and ab.model and ab.calibration
-    lo, hi = ab.calibration.bin_lo, ab.calibration.bin_hi
-    assert lo <= ab.probability_a < hi
+    assert ab.calibration == ba.calibration  # the favourite's record, whoever is A
+    assert (
+        ab.calibration.bin_lo <= max(ab.probability_a, 1 - ab.probability_a) < ab.calibration.bin_hi
+    )
     # every other condition still blocks it
     assert decide(st(1), st(2, played=5), "MS", SERVED, **kw).outcome == "comparison"
     assert decide(st(1), st(2, comp=1), "MS", SERVED, **kw).outcome == "incompatible_pools"
@@ -146,3 +153,21 @@ def test_the_shipped_flags_are_off() -> None:
     assert matchups.PUBLIC_PROBABILITIES is False
     assert matchups.PUBLIC_RATINGS is False
     assert matchups.RELEASE_EVIDENCE is None
+
+
+def test_uncertainty_grows_with_time_since_the_ratings() -> None:
+    near = probability(Rated(1700, 60, 40, D, 0, False), Rated(1500, 60, 40, D, 0, False),
+                       SERVED, D)  # fmt: skip
+    later = probability(Rated(1700, 60, 40, D, 0, False), Rated(1500, 60, 40, D, 0, False),
+                        SERVED, D + timedelta(days=200))  # fmt: skip
+    assert 0.5 < later < near  # months without results: a less confident forecast
+    a, b = Rated(1700, 60, 40, D, 0, False), Rated(1500, 60, 40, D, 0, False)
+    on = D + timedelta(days=90)
+    assert probability(a, b, SERVED, on) + probability(b, a, SERVED, on) == pytest.approx(1)
+
+
+def test_a_forecast_outside_the_validated_range_gets_no_number() -> None:
+    narrow = {**EVIDENCE, "favourite_reliability": [EVIDENCE["favourite_reliability"][0]]}
+    m = decide(st(1, rating=2100), st(2, rating=1400), "MS", SERVED, public_probabilities=True,
+               release_evidence=narrow)  # fmt: skip
+    assert m.outcome == "comparison" and m.probability_a is None

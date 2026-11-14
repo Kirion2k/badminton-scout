@@ -1,5 +1,6 @@
 """Read API over normalized data. Only redistributable events are ever visible (ADR-0009)."""
 
+import dataclasses
 import urllib.parse
 from collections import Counter, defaultdict
 from datetime import date, datetime
@@ -27,8 +28,6 @@ from scout.models import (
     Player,
     PlayerLink,
     RatingCurrent,
-    RatingModel,
-    RatingRun,
     RawRecord,
     RawRecordRevision,
     Source,
@@ -37,7 +36,7 @@ from scout.models import (
     TournamentDiscovery,
 )
 from scout.privacy import is_redistributable_event
-from scout.ratings.production import latest_run
+from scout.ratings import production
 from scout.sources import SOURCES
 
 router = APIRouter(prefix="/v1", tags=["players"])
@@ -456,6 +455,18 @@ def _player_or_redirect(db: Session, player_id: int, suffix: str = "") -> Player
     return player
 
 
+def _merged_into(db: Session, player_id: int) -> list[int]:
+    """Every record merged (directly or through others) into this player."""
+    found: list[int] = []
+    frontier = [player_id]
+    for _ in range(5):  # merge chains are short (ADR-0003); _canonical follows at most 5 hops
+        frontier = list(db.scalars(select(Player.id).where(Player.merged_into_id.in_(frontier))))
+        if not frontier:
+            break
+        found += frontier
+    return found
+
+
 def _canonical(db: Session, player_id: int) -> Player:
     """The player a (possibly merged) id now belongs to; 404 for unknown, withheld or hidden."""
     player = db.get(Player, player_id)
@@ -837,30 +848,28 @@ def compare_matchup(
     if (pa.id, pb.id) != (a, b):
         query = urllib.parse.urlencode({"a": pa.id, "b": pb.id, "discipline": discipline})
         return RedirectResponse(f"/v1/matchups/compare?{query}", status_code=308)
-    run_id = latest_run(db)
-    served = None
+    served = production.served(db)
     rated: dict[int, matchups.Rated] = {}
-    if run_id is not None:
-        run = db.get(RatingRun, run_id)
-        model = db.get(RatingModel, run.model_id) if run else None
-        if run and model and run.finished_at:
-            served = matchups.Served(
-                run_id=run.id, snapshot_id=run.snapshot_id, version=model.config_hash,
-                data_as_of=date.fromisoformat(run.metrics["data_as_of"]),
-                computed_at=run.finished_at,
-                temperature=float(run.metrics.get("calibration", {}).get("temperature", 1.0)),
+    stale = False
+    if served is not None:
+        for r in db.scalars(
+            select(RatingCurrent).where(
+                RatingCurrent.run_id == served.run_id,
+                RatingCurrent.pool == f"bwf:{discipline}",  # never a federation or junior pool
+                RatingCurrent.player_id.in_(
+                    [pa.id, pb.id, *_merged_into(db, pa.id), *_merged_into(db, pb.id)]
+                ),
+            )
+        ):
+            if r.player_id not in (pa.id, pb.id):
+                stale = True  # a rated record merged after the rebuild: the rating is outdated
+                continue
+            rated[r.player_id] = matchups.Rated(
+                rating=r.rating, rd=r.rd, played=r.played, last_played=r.last_played,
+                component=r.component, identity_flagged=r.identity_flagged, vol=r.vol or 0.06,
             )  # fmt: skip
-            for r in db.scalars(
-                select(RatingCurrent).where(
-                    RatingCurrent.run_id == run.id,
-                    RatingCurrent.pool == f"bwf:{discipline}",  # never a federation or junior pool
-                    RatingCurrent.player_id.in_([pa.id, pb.id]),
-                )
-            ):
-                rated[r.player_id] = matchups.Rated(
-                    rating=r.rating, rd=r.rd, played=r.played, last_played=r.last_played,
-                    component=r.component, identity_flagged=r.identity_flagged,
-                )  # fmt: skip
+        if stale:  # never a rating or probability for a record whose identity changed since
+            rated = {pid: dataclasses.replace(r, identity_flagged=True) for pid, r in rated.items()}
 
     def standing(pid: int) -> matchups.Standing:
         sides = _sides_of(pid).subquery()
@@ -883,7 +892,7 @@ def compare_matchup(
     ).all()
     h2h = (sum(w == side for w, side in met), sum(w != side for w, side in met))
     result = matchups.decide(standing(pa.id), standing(pb.id), discipline, served,
-                             head_to_head=h2h)  # fmt: skip
+                             head_to_head=h2h, on=date.today())  # fmt: skip
     if result.ratings_shown or result.probability_a is not None:
         response.headers["cache-control"] = "no-store"  # nothing derived from ratings is cached
     return result
