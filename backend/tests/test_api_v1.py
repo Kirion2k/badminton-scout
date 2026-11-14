@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 import scout.privacy
+from scout import matchups
 from scout.db import get_session
 from scout.ingest.operations import TsMatchRow
 from scout.ingest.tournamentsoftware import ingest_rows
@@ -20,6 +21,10 @@ from scout.models import (
     Match,
     Player,
     PlayerLink,
+    RatingCurrent,
+    RatingModel,
+    RatingRun,
+    RatingSnapshot,
     SourcePlayer,
     Tournament,
 )
@@ -526,3 +531,91 @@ async def test_two_ids_of_one_person_compare_to_their_profile(
     data.flush()
     r = await api.get(f"/v1/players/{lee.id}/head-to-head/{kim}")
     assert r.status_code == 308 and r.headers["location"] == f"/v1/players/{kim}"
+
+
+def serve_ratings(session: Session, players: dict[int, int]) -> int:
+    """A served BWF run rating the given players ({player id: matches played})."""
+    snap = RatingSnapshot(family="bwf", query_version=2, content_hash="x", counts={})
+    model = RatingModel(name="glicko2", config={}, config_hash="cfg")
+    session.add_all([snap, model])
+    session.flush()
+    run = RatingRun(model_id=model.id, snapshot_id=snap.id, pool="bwf", kind="full",
+                    code_version="test", metrics={"data_as_of": "2026-07-05"},
+                    finished_at=datetime.now(UTC))  # fmt: skip
+    session.add(run)
+    session.flush()
+    for i, (pid, played) in enumerate(players.items()):
+        session.add(RatingCurrent(run_id=run.id, pool="bwf:MS", player_id=pid,
+                                  rating=1600.0 + 50 * i, rd=70.0, vol=0.06, played=played,
+                                  last_played=date(2026, 7, 5), component=0))  # fmt: skip
+    session.flush()
+    return run.id
+
+
+async def test_matchup_compares_results_and_never_shows_a_number(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    alex, sam = player_id(data, "Alex TESTER"), player_id(data, "Sam EXAMPLE")
+    r = await api.get("/v1/matchups/compare", params={"a": alex, "b": sam, "discipline": "MS"})
+    body = r.json()
+    assert r.status_code == 200 and body["outcome"] == "comparison"  # no rating: results only
+    assert body["probability_a"] is None and body["a"]["rating"] is None
+    assert body["a"]["pool"] == "unrated" and body["reasons"]
+    h2h = (await api.get(f"/v1/players/{alex}/head-to-head/{sam}")).json()
+    ms = next(d for d in h2h["by_discipline"] if d["discipline"] == "MS")
+    assert body["head_to_head"] == [ms["a_won"], ms["b_won"]]
+    swapped = (await api.get("/v1/matchups/compare", params={"a": sam, "b": alex})).json()
+    assert swapped["head_to_head"] == body["head_to_head"][::-1]
+    ws = await api.get("/v1/matchups/compare", params={"a": alex, "b": sam, "discipline": "WS"})
+    assert ws.json()["outcome"] == "insufficient_data"
+
+
+async def test_matchup_identity_rules(api: httpx.AsyncClient, data: Session) -> None:
+    kim, pat = player_id(data, "Kim SAMPLE"), player_id(data, "Pat DUMMY")
+    assert (await api.get("/v1/matchups/compare", params={"a": kim, "b": kim})).status_code == 422
+    lee = data.get(Player, player_id(data, "Lee PLACEHOLDER"))
+    assert lee is not None
+    lee.merged_into_id = kim
+    data.flush()
+    r = await api.get("/v1/matchups/compare", params={"a": lee.id, "b": pat, "discipline": "MS"})
+    assert r.status_code == 308
+    assert r.headers["location"] == f"/v1/matchups/compare?a={kim}&b={pat}&discipline=MS"
+    sam = data.get(Player, player_id(data, "Sam EXAMPLE"))
+    assert sam is not None
+    sam.withheld_at = datetime.now(UTC)
+    data.flush()
+    assert (
+        await api.get("/v1/matchups/compare", params={"a": kim, "b": sam.id})
+    ).status_code == 404
+
+
+async def test_matchup_with_served_ratings_keeps_them_behind_the_flag(
+    api: httpx.AsyncClient, data: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alex, sam = player_id(data, "Alex TESTER"), player_id(data, "Sam EXAMPLE")
+    serve_ratings(data, {alex: 40, sam: 40})
+    r = await api.get("/v1/matchups/compare", params={"a": alex, "b": sam})
+    body = r.json()
+    assert body["outcome"] == "comparison" and body["data_as_of"] == "2026-07-05"
+    assert body["a"]["pool"] == "bwf:MS" and body["a"]["rating"] is None
+    assert "cache-control" not in r.headers
+    monkeypatch.setattr(matchups, "PUBLIC_RATINGS", True)
+    r = await api.get("/v1/matchups/compare", params={"a": alex, "b": sam})
+    assert r.json()["a"]["rating"] == 1600.0 and r.headers["cache-control"] == "no-store"
+    monkeypatch.setattr(matchups, "PUBLIC_PROBABILITIES", True)  # still no release evidence
+    assert (await api.get("/v1/matchups/compare", params={"a": alex, "b": sam})).json()[
+        "probability_a"
+    ] is None
+
+
+async def test_no_route_but_the_gated_matchup_can_carry_a_rating(api: httpx.AsyncClient) -> None:
+    """Junior and federation ratings stay private: rating fields exist only in the matchup
+    evidence, which is gated by PUBLIC_RATINGS and only ever filled from bwf:* pools."""
+    schemas = (await api.get("/openapi.json")).json()["components"]["schemas"]
+    words = ("rating", "rd", "volatility", "probability")
+    carrying = {
+        name for name, schema in schemas.items()
+        for prop in schema.get("properties", {})
+        if any(w == prop or prop.startswith(f"{w}_") for w in words)
+    }  # fmt: skip
+    assert carrying == {"Evidence", "Matchup"}

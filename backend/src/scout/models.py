@@ -510,3 +510,48 @@ class MatchPrediction(Base):
     prior_a: Mapped[int]
     prior_b: Mapped[int]
     abstain: Mapped[str | None] = mapped_column(String(24))
+
+
+class RatingCurrent(Base):
+    """Each player's rating at the end of a full run (ADR-0013): what the matchup route reads.
+    Only BWF singles runs are written here; no route reads federation or junior pools."""
+
+    __tablename__ = "rating_current"
+
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("rating_run.id", ondelete="CASCADE"), primary_key=True
+    )
+    pool: Mapped[str] = mapped_column(Text, primary_key=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    rating: Mapped[float]
+    rd: Mapped[float | None]
+    vol: Mapped[float | None]
+    played: Mapped[int]
+    last_played: Mapped[date]
+    component: Mapped[int]  # connected-component id within the pool (same id: comparable)
+    identity_flagged: Mapped[bool] = mapped_column(server_default="false")
+
+
+class IssuedPrediction(Base):
+    """A forecast recorded before its match is played (ADR-0013). A trigger forbids changing
+    or deleting it; the result columns are filled once."""
+
+    __tablename__ = "issued_prediction"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    issued_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    scheduled_on: Mapped[date]
+    match_ref: Mapped[str] = mapped_column(Text)  # e.g. the tournament, draw and round
+    discipline: Mapped[str] = mapped_column(String(2))
+    player_a: Mapped[int] = mapped_column(BigInteger)
+    player_b: Mapped[int] = mapped_column(BigInteger)
+    p_a: Mapped[float]
+    config_hash: Mapped[str] = mapped_column(Text)
+    calibration_hash: Mapped[str] = mapped_column(Text)
+    run_id: Mapped[int] = mapped_column(ForeignKey("rating_run.id"))
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("rating_snapshot.id"))
+    snapshot_hash: Mapped[str] = mapped_column(Text)
+    a_won: Mapped[bool | None]
+    resolved_at: Mapped[datetime | None]
+    resolved_match_id: Mapped[int | None] = mapped_column(BigInteger)
+    verified_by: Mapped[str | None] = mapped_column(Text)

@@ -1,18 +1,21 @@
 """Read API over normalized data. Only redistributable events are ever visible (ADR-0009)."""
 
+import urllib.parse
 from collections import Counter, defaultdict
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import ColumnElement, Select, exists, func, literal, or_, select, text
 from sqlalchemy.orm import Session
 
 import scout.privacy
+from scout import matchups
 from scout.db import get_session
 from scout.ingest.tournamentsoftware import discipline_of
+from scout.matchups import Matchup
 from scout.models import (
     Event,
     Game,
@@ -23,6 +26,9 @@ from scout.models import (
     MatchSidePlayer,
     Player,
     PlayerLink,
+    RatingCurrent,
+    RatingModel,
+    RatingRun,
     RawRecord,
     RawRecordRevision,
     Source,
@@ -31,6 +37,7 @@ from scout.models import (
     TournamentDiscovery,
 )
 from scout.privacy import is_redistributable_event
+from scout.ratings.production import latest_run
 from scout.sources import SOURCES
 
 router = APIRouter(prefix="/v1", tags=["players"])
@@ -816,6 +823,70 @@ def head_to_head(db: DB, a_id: int, b_id: int) -> HeadToHead | RedirectResponse:
         matches=matches,
         common_opponents=common,
     )
+
+
+@router.get("/matchups/compare", response_model=Matchup)
+def compare_matchup(
+    db: DB, response: Response, a: int, b: int, discipline: Literal["MS", "WS"] = "MS"
+) -> Matchup | RedirectResponse:
+    """Mynton Matchup (ADR-0013). Probabilities and rating numbers are behind flags that are
+    off: until then this compares results only and says why no probability is given."""
+    pa, pb = _canonical(db, a), _canonical(db, b)
+    if pa.id == pb.id:
+        raise HTTPException(422, "a player cannot be compared with themselves")
+    if (pa.id, pb.id) != (a, b):
+        query = urllib.parse.urlencode({"a": pa.id, "b": pb.id, "discipline": discipline})
+        return RedirectResponse(f"/v1/matchups/compare?{query}", status_code=308)
+    run_id = latest_run(db)
+    served = None
+    rated: dict[int, matchups.Rated] = {}
+    if run_id is not None:
+        run = db.get(RatingRun, run_id)
+        model = db.get(RatingModel, run.model_id) if run else None
+        if run and model and run.finished_at:
+            served = matchups.Served(
+                run_id=run.id, snapshot_id=run.snapshot_id, version=model.config_hash,
+                data_as_of=date.fromisoformat(run.metrics["data_as_of"]),
+                computed_at=run.finished_at,
+                temperature=float(run.metrics.get("calibration", {}).get("temperature", 1.0)),
+            )  # fmt: skip
+            for r in db.scalars(
+                select(RatingCurrent).where(
+                    RatingCurrent.run_id == run.id,
+                    RatingCurrent.pool == f"bwf:{discipline}",  # never a federation or junior pool
+                    RatingCurrent.player_id.in_([pa.id, pb.id]),
+                )
+            ):
+                rated[r.player_id] = matchups.Rated(
+                    rating=r.rating, rd=r.rd, played=r.played, last_played=r.last_played,
+                    component=r.component, identity_flagged=r.identity_flagged,
+                )  # fmt: skip
+
+    def standing(pid: int) -> matchups.Standing:
+        sides = _sides_of(pid).subquery()
+        n, last = db.execute(
+            select(func.count(), func.max(Match.played_on))
+            .select_from(sides)
+            .join(Match, Match.id == sides.c.match_id)
+            .join(Event, Event.id == Match.event_id)
+            .where(Event.discipline == discipline)
+        ).one()
+        return matchups.Standing(pid, n, last, rated.get(pid))
+
+    sa, sb = _sides_of(pa.id).subquery(), _sides_of(pb.id).subquery()
+    met = db.execute(
+        select(Match.winner_side, sa.c.side)
+        .join(sa, sa.c.match_id == Match.id)
+        .join(sb, (sb.c.match_id == Match.id) & (sb.c.side != sa.c.side))
+        .join(Event, Event.id == Match.event_id)
+        .where(Event.discipline == discipline, Match.winner_side.is_not(None))
+    ).all()
+    h2h = (sum(w == side for w, side in met), sum(w != side for w, side in met))
+    result = matchups.decide(standing(pa.id), standing(pb.id), discipline, served,
+                             head_to_head=h2h)  # fmt: skip
+    if result.ratings_shown or result.probability_a is not None:
+        response.headers["cache-control"] = "no-store"  # nothing derived from ratings is cached
+    return result
 
 
 @router.get("/tournaments/{tournament_id}")

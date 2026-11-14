@@ -3,12 +3,20 @@
 from datetime import UTC, date, datetime
 from typing import Any
 
-import httpx
 import pytest
 from pydantic import ValidationError
 
-from scout.main import create_app
-from scout.matchups import Calibration, Evidence, Matchup, ModelInfo
+from scout import matchups
+from scout.matchups import (
+    Calibration,
+    Evidence,
+    Matchup,
+    ModelInfo,
+    Rated,
+    Served,
+    Standing,
+    decide,
+)
 
 
 def ev(pid: int, pool: str = "bwf:MS", n: int = 40) -> Evidence:
@@ -63,10 +71,78 @@ def test_outcomes_without_a_probability() -> None:
     assert cross.a and cross.b and cross.a.pool != cross.b.pool
 
 
-@pytest.mark.anyio
-async def test_the_matchup_route_is_not_published_yet() -> None:
-    app = create_app()
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as api:
-        assert (await api.get("/v1/matchups/compare", params={"a": 1, "b": 2})).status_code == 404
+D = date(2026, 7, 5)
+SERVED = Served(run_id=1, snapshot_id=1, version="abc", data_as_of=D,
+                computed_at=datetime(2026, 11, 15, tzinfo=UTC))  # fmt: skip
+EVIDENCE = {"log_loss": 0.55, "reliability": [
+    {"lo": i / 10, "hi": (i + 1) / 10, "n": 300, "observed": i / 10 + 0.05} for i in range(10)
+]}  # fmt: skip
+
+
+def st(
+    pid: int,
+    played: int = 40,
+    *,
+    rating: float = 1600.0,
+    comp: int = 0,
+    flagged: bool = False,
+    bwf: bool = True,
+    matches: int | None = None,
+) -> Standing:
+    rated = Rated(rating, 80.0, played, D, comp, flagged) if bwf else None
+    return Standing(pid, played if matches is None else matches, D, rated)  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "outcome"),
+    [
+        (st(1), st(2), "comparison"),  # flags off: never a number
+        (st(1), st(2, played=5), "comparison"),
+        (st(1), st(2, flagged=True), "identity_uncertain"),
+        (st(1), st(2, comp=3), "incompatible_pools"),
+        (st(1), st(2, bwf=False, matches=30), "incompatible_pools"),
+        (st(1, bwf=False, matches=30), st(2, bwf=False, matches=12), "comparison"),
+        (st(1), st(2, bwf=False, matches=0), "insufficient_data"),
+    ],
+)  # fmt: skip
+def test_outcomes_with_the_flags_off(a: Standing, b: Standing, outcome: str) -> None:
+    m = decide(a, b, "MS", SERVED)
+    assert m.outcome == outcome and m.probability_a is None and m.reasons
+    assert m.a and m.b and m.a.rating is None and m.b.rating is None and not m.ratings_shown
+
+
+def test_flags_on_without_release_evidence_still_gives_no_number() -> None:
+    m = decide(st(1), st(2), "MS", SERVED, public_probabilities=True, public_ratings=True)
+    assert m.outcome == "comparison" and m.probability_a is None
+    assert m.ratings_shown and m.a and m.a.rating == 1600.0  # ratings flag alone shows ratings
+
+
+def test_a_probability_needs_everything_and_is_symmetric() -> None:
+    kw: dict[str, Any] = {"public_probabilities": True, "release_evidence": EVIDENCE}
+    ab = decide(st(1, rating=1700), st(2, rating=1550), "MS", SERVED, **kw)
+    ba = decide(st(2, rating=1550), st(1, rating=1700), "MS", SERVED, **kw)
+    assert ab.outcome == ba.outcome == "probability"
+    assert ab.probability_a and ba.probability_a
+    assert ab.probability_a + ba.probability_a == pytest.approx(1, abs=2e-4)  # 4-place rounding
+    assert ab.probability_a > 0.5 and ab.model and ab.calibration
+    lo, hi = ab.calibration.bin_lo, ab.calibration.bin_hi
+    assert lo <= ab.probability_a < hi
+    # every other condition still blocks it
+    assert decide(st(1), st(2, played=5), "MS", SERVED, **kw).outcome == "comparison"
+    assert decide(st(1), st(2, comp=1), "MS", SERVED, **kw).outcome == "incompatible_pools"
+    assert decide(st(1), st(2, flagged=True), "MS", SERVED, **kw).outcome == "identity_uncertain"
+    assert decide(st(1), st(2), "MS", None, **kw).outcome == "incompatible_pools"
+
+
+def test_unrated_players_never_carry_rating_fields_even_with_flags_on() -> None:
+    on: dict[str, Any] = {"public_probabilities": True, "public_ratings": True,
+                          "release_evidence": EVIDENCE}  # fmt: skip
+    m = decide(st(1, bwf=False, matches=30), st(2, bwf=False, matches=30), "MS", SERVED, **on)
+    assert m.outcome == "comparison" and m.a and m.a.pool == "unrated" and m.a.rating is None
+    assert m.data_as_of is None
+
+
+def test_the_shipped_flags_are_off() -> None:
+    assert matchups.PUBLIC_PROBABILITIES is False
+    assert matchups.PUBLIC_RATINGS is False
+    assert matchups.RELEASE_EVIDENCE is None
