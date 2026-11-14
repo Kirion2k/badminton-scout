@@ -405,3 +405,103 @@ class AppSetting(Base):
 
     name: Mapped[str] = mapped_column(Text, primary_key=True)
     value: Mapped[str] = mapped_column(Text)
+
+
+# Ratings (ADR-0006, ADR-0012). Derived only: nothing here is a source of truth, and match data
+# is never changed by them. A snapshot freezes the eligible matches (with the player ids of the
+# time) so any run can be replayed exactly.
+
+
+class RatingModel(Base):
+    __tablename__ = "rating_model"
+    __table_args__ = (UniqueConstraint("name", "config_hash"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)  # "elo", "glicko2", "winrate", "constant"
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    config_hash: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class RatingSnapshot(Base):
+    __tablename__ = "rating_snapshot"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    family: Mapped[str] = mapped_column(Text)  # "bwf" or "fed"
+    query_version: Mapped[int] = mapped_column(SmallInteger)
+    content_hash: Mapped[str] = mapped_column(Text)
+    # eligible matches per pool and exclusions by reason
+    counts: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class RatingSnapshotMatch(Base):
+    __tablename__ = "rating_snapshot_match"
+
+    snapshot_id: Mapped[int] = mapped_column(
+        ForeignKey("rating_snapshot.id", ondelete="CASCADE"), primary_key=True
+    )
+    match_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    revision_id: Mapped[int] = mapped_column(BigInteger)
+    pool: Mapped[str] = mapped_column(Text)
+    day: Mapped[date]
+    rank: Mapped[int | None] = mapped_column(SmallInteger)
+    cluster: Mapped[int] = mapped_column(BigInteger)  # the tournament
+    a: Mapped[int] = mapped_column(BigInteger)  # canonical player ids at snapshot time
+    b: Mapped[int] = mapped_column(BigInteger)
+    a_won: Mapped[bool]
+
+
+class RatingRun(Base):
+    __tablename__ = "rating_run"
+    __table_args__ = (
+        CheckConstraint("kind IN ('backtest', 'full', 'incremental')", name="kind_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    model_id: Mapped[int] = mapped_column(ForeignKey("rating_model.id"))
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("rating_snapshot.id"))
+    pool: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(16))
+    splits: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    code_version: Mapped[str] = mapped_column(Text)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    output_hash: Mapped[str | None] = mapped_column(Text)
+    # an incremental run replays from this day on top of `base_run_id`
+    from_day: Mapped[date | None]
+    base_run_id: Mapped[int | None] = mapped_column(ForeignKey("rating_run.id"))
+    started_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    finished_at: Mapped[datetime | None]
+
+
+class RatingPoint(Base):
+    """A player's rating after their last batch of a day: retrospective, never a prediction."""
+
+    __tablename__ = "rating_point"
+
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("rating_run.id", ondelete="CASCADE"), primary_key=True
+    )
+    player_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    day: Mapped[date] = mapped_column(primary_key=True)
+    rating: Mapped[float]
+    rd: Mapped[float | None]
+    vol: Mapped[float | None]
+    played: Mapped[int]
+
+
+class MatchPrediction(Base):
+    """P(side a wins) from strictly earlier batches (ADR-0006): the only thing ever scored."""
+
+    __tablename__ = "match_prediction"
+
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("rating_run.id", ondelete="CASCADE"), primary_key=True
+    )
+    match_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    p: Mapped[float | None]
+    y: Mapped[int] = mapped_column(SmallInteger)
+    split: Mapped[str] = mapped_column(String(12))
+    prior_a: Mapped[int]
+    prior_b: Mapped[int]
+    abstain: Mapped[str | None] = mapped_column(String(24))

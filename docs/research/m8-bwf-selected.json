@@ -1,0 +1,45 @@
+{
+  "_note": "BWF selections from validation (2022-01-01..2024-12-31) only, committed before the test split (2025-01-01..2026-07-05) was read. ADR-0012.",
+  "snapshot": {
+    "id": 1,
+    "family": "bwf",
+    "content_hash": "4a47d48c84f0 (prefix)"
+  },
+  "constant": {
+    "config": {},
+    "by_round": true
+  },
+  "elo_default": {
+    "config": {
+      "k": 32.0
+    },
+    "by_round": true,
+    "_note": "ADR-0012 baseline 3: default K, no provisional K, round batching"
+  },
+  "winrate": {
+    "config": {
+      "prior": 2.0
+    },
+    "by_round": false,
+    "validation_log_loss": 0.6153877554782796
+  },
+  "elo_tuned": {
+    "config": {
+      "k": 32.0,
+      "provisional_k": 96.0,
+      "provisional_n": 20,
+      "decay_per_year": 0.0
+    },
+    "by_round": false,
+    "validation_log_loss": 0.5473621208680532
+  },
+  "glicko2": {
+    "config": {
+      "tau": 1.2,
+      "period_days": 3,
+      "initial_rd": 250.0
+    },
+    "by_round": false,
+    "validation_log_loss": 0.5432925464228318
+  }
+}
