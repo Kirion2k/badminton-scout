@@ -239,7 +239,7 @@ def normalize(
     )
 
 
-def _get_or_create_source_player(session: Session, source_id: str, ref: PlayerRef) -> SourcePlayer:
+def get_or_create_source_player(session: Session, source_id: str, ref: PlayerRef) -> SourcePlayer:
     found = session.scalar(
         select(SourcePlayer).filter_by(source_id=source_id, source_key=ref.source_key)
     )
@@ -262,7 +262,7 @@ def _get_or_create_source_player(session: Session, source_id: str, ref: PlayerRe
     return sp
 
 
-def _write_match(session: Session, source_id: str, record: RawRecord, m: NormalizedMatch) -> None:
+def write_match(session: Session, source_id: str, record: RawRecord, m: NormalizedMatch) -> None:
     tournament = session.scalar(
         select(Tournament).filter_by(source_id=source_id, source_key=m.tournament_key)
     ) or Tournament(source_id=source_id, source_key=m.tournament_key)
@@ -299,7 +299,7 @@ def _write_match(session: Session, source_id: str, record: RawRecord, m: Normali
         session.add(side)
         session.flush()
         for position, ref in enumerate(refs, start=1):
-            sp = _get_or_create_source_player(session, source_id, ref)
+            sp = get_or_create_source_player(session, source_id, ref)
             session.add(
                 MatchSidePlayer(match_side_id=side.id, position=position, source_player_id=sp.id)
             )
@@ -358,10 +358,10 @@ def ingest_rows(
         if isinstance(normalized, Rejection):
             if existing:  # the source's new revision no longer makes a valid match
                 session.delete(existing)
-            _issue(session, run, record.id, normalized.kind, {"detail": normalized.detail})
+            record_issue(session, run, record.id, normalized.kind, {"detail": normalized.detail})
             counts[f"rejected:{normalized.kind}"] += 1
             continue
-        _write_match(session, run.source_id, record, normalized)
+        write_match(session, run.source_id, record, normalized)
         counts["normalized"] += 1
     counts["missing_from_source"] += _flag_missing(session, run, played_on, items, set(by_key))
     session.flush()
@@ -389,11 +389,11 @@ def _flag_missing(
     ).all()
     missing = [(rid, key) for rid, key in held if key not in seen]
     for rid, key in missing:
-        _issue(session, run, rid, "missing_from_source", {"key": key})
+        record_issue(session, run, rid, "missing_from_source", {"key": key})
     return len(missing)
 
 
-def _issue(
+def record_issue(
     session: Session, run: IngestRun, raw_record_id: int, kind: str, detail: dict[str, Any]
 ) -> None:
     """Record an issue once per record and kind; later runs that see it again add nothing."""
