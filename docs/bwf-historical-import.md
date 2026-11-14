@@ -48,6 +48,29 @@ SHA-256 of the imported files:
   - **Quarantined (`irregular_score`):** anything that contradicts the winner.
 - **Events:** each discipline, with qualification as its own event ("MS Qualification").
 
-## Results
+## Results (import of 2026-11-14, verified against the database)
 
-See the import report at the end of this file (filled in from the database after the run).
+| | Count |
+|---|---|
+| Source rows (matches.csv) | 105,147 |
+| Exact duplicate rows merged (the README's 208 blank-round repeats) | 208 |
+| Unique match records stored | 104,939 (104,939 + 208 = 105,147) |
+| Normalised matches | **104,837**: completed 103,380 · retired 1,457 |
+| Quarantined (`ingest_issue`) | 102 `irregular_score` (games that contradict the recorded winner) |
+| Unresolved tournaments | 0 (the 18 repeated names resolved by date) |
+| Tournaments | **577**, 2007-01-16 to 2026-07-05, each with BWF's index id |
+| Source players | **9,251** (the README's 9,251 distinct names); 24 keyed by BWF id |
+| Players linked to any other source | 0 (no name-based merging) |
+| Same event already held by another source | 0 found |
+| By discipline | MS 28,181 · WS 21,297 · MD 19,643 · WD 16,335 · XD 19,381 |
+| Qualification matches | 15,505 |
+
+**Rating readiness:**
+- **Eligible:** 103,380 matches are completed with a full legal score and both sides identified.
+  The 1,457 retirements are kept but are not rating-eligible.
+- **Players by completed matches:** 1,447 with 50+, 994 with 20–49, 1,158 with 10–19, 1,556 with
+  5–9, and 4,079 with 1–4.
+- **Identity uncertainty:** players are names within this dataset. A name change or two people
+  sharing one name is resolved only where the compiler added a `[id]`.
+- **Data has a date, not a time:** matches on the same day are ordered by id, so chronological
+  backtests need a stable intra-day order.

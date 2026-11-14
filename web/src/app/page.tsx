@@ -25,6 +25,8 @@ export default function DiscoverPage({ searchParams }: PageProps<"/">) {
         </h1>
         <div className="mt-5">
           <h2 className="sr-only">Find a player</h2>
+          {/* shortcut: text typed before the streamed form replaces this first-paint one is lost
+              (a few hundred ms on a slow phone); keep the form outside Suspense if it is reported */}
           <Suspense fallback={<SearchForm />}>
             <SearchBox searchParams={searchParams} />
           </Suspense>
@@ -118,58 +120,24 @@ async function PlayerResults({ q }: { q: string }) {
 const LATE_ROUND = /final|finale|halbfinale|demi|semi|kf|hf|^f$|^sf$|^qf$/i;
 
 async function Overview() {
-  const [recent, coverage] = await Promise.all([
-    api.tournaments({ limit: 12 }),
-    api.coverage(),
-  ]);
+  const recent = await api.tournaments({ limit: 12 });
   const featured = recent.items.find(
     (t) => t.import_state?.status === "complete" && t.matches > 0,
   );
-  const live = coverage.providers
-    .filter((p) => p.public_tournaments > 0)
-    .sort((a, b) => b.public_matches - a.public_matches);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="min-w-0">
         {featured && <LatestResults tournament={featured} />}
       </div>
-      <Section title="Federations">
-        <ul className="text-[14px]">
-          {live.map((p) => {
-            const fed = FEDERATION[p.source_id];
-            return (
-              <li key={p.source_id} className="border-b border-border">
-                <Link
-                  href={`/tournaments?source=${p.source_id}`}
-                  className="flex items-center gap-2.5 py-2 hover:no-underline"
-                >
-                  <FedCode code={fed?.code ?? "—"} />
-                  <span className="min-w-0 flex-1 truncate hover:underline">
-                    {fed?.country ?? fed?.label ?? p.name}
-                  </span>
-                  <span className="num text-muted-foreground">
-                    {p.public_tournaments}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mt-2 text-[12px] text-subtle">
-          Tournaments per source. Updated{" "}
-          {formatMoment(coverage.last_sync_at) ?? "when the first sync runs"}.{" "}
-          <Link href="/coverage" className="underline">
-            Sources and gaps
-          </Link>
-        </p>
-      </Section>
+      <Suspense fallback={<RowsSkeleton rows={6} />}>
+        <Federations />
+      </Suspense>
       <Section
         className="lg:col-span-2"
         title="Recently played"
         action={
           <Link href="/tournaments" className="underline">
-            All {coverage.public_tournaments.toLocaleString("en-AU")}{" "}
-            tournaments
+            All {recent.total.toLocaleString("en-AU")} tournaments
           </Link>
         }
       >
@@ -184,6 +152,46 @@ async function Overview() {
         )}
       </Section>
     </div>
+  );
+}
+
+/** Sources with public tournaments, streamed on their own: coverage is the slowest call. */
+async function Federations() {
+  const coverage = await api.coverage();
+  const live = coverage.providers
+    .filter((p) => p.public_tournaments > 0)
+    .sort((a, b) => b.public_matches - a.public_matches);
+  return (
+    <Section title="Federations">
+      <ul className="text-[14px]">
+        {live.map((p) => {
+          const fed = FEDERATION[p.source_id];
+          return (
+            <li key={p.source_id} className="border-b border-border">
+              <Link
+                href={`/tournaments?source=${p.source_id}`}
+                className="flex items-center gap-2.5 py-2 hover:no-underline"
+              >
+                <FedCode code={fed?.code ?? "—"} />
+                <span className="min-w-0 flex-1 truncate hover:underline">
+                  {fed?.country ?? fed?.label ?? p.name}
+                </span>
+                <span className="num text-muted-foreground">
+                  {p.public_tournaments}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-[12px] text-subtle">
+        Tournaments per source. Updated{" "}
+        {formatMoment(coverage.last_sync_at) ?? "when the first sync runs"}.{" "}
+        <Link href="/coverage" className="underline">
+          Sources and gaps
+        </Link>
+      </p>
+    </Section>
   );
 }
 

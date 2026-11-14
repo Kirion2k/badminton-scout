@@ -4,13 +4,15 @@ import { expect, test } from "@playwright/test";
 import { ids } from "./fixture";
 
 const pages = () => {
-  const { alex, spring } = ids();
+  const { alex, spring, jordan } = ids();
   return [
     "/",
     "/?q=tester",
     "/tournaments",
     `/tournaments/${spring}`,
     `/players/${alex}`,
+    `/players/${alex}/vs/${jordan}`, // a comparison (no meetings: the empty state)
+    `/players/${alex}/vs?q=sam`,
     "/coverage",
   ];
 };
@@ -55,7 +57,7 @@ test("keyboard: skip link, slash to search, enter to submit", async ({
   ).toBeFocused();
   await page.locator("body").click({ position: { x: 5, y: 300 } });
   await page.keyboard.press("/");
-  const search = page.getByRole("searchbox", {
+  const search = page.getByRole("combobox", {
     name: "Search players by name",
   });
   await expect(search).toBeFocused();

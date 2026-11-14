@@ -14,7 +14,7 @@ import {
 } from "@/components/bits";
 import { Shell } from "@/components/shell";
 import { Input } from "@/components/ui/input";
-import { type Coverage, type TournamentSummary, api } from "@/lib/api/client";
+import { type TournamentSummary, api } from "@/lib/api/client";
 import {
   DISCIPLINES,
   formatDateRange,
@@ -78,18 +78,28 @@ async function TournamentList({
     sort: known(one(sp.sort), SORTS),
   };
   const page = positiveInt(one(sp.page), 1);
-  const [data, coverage] = await Promise.all([
-    api.tournaments({
-      ...filters,
-      limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
-    }),
-    api.coverage(),
-  ]);
+  // the list does not wait for coverage (the rail's federation counts): it streams in beside it
+  const data = await api.tournaments({
+    ...filters,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  });
   const filtered = Object.entries(filters).some(([k, v]) => k !== "sort" && v);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12">
-      <FilterRail filters={filters} coverage={coverage} />
+      <Suspense
+        fallback={
+          <aside
+            id="filters"
+            aria-label="Filters"
+            className="order-last min-w-0 lg:order-none"
+          >
+            <RowsSkeleton rows={4} />
+          </aside>
+        }
+      >
+        <FilterRail filters={filters} />
+      </Suspense>
       <section aria-labelledby="results-heading" className="min-w-0">
         <div className="sheet-head flex-wrap">
           <h2 id="results-heading" aria-live="polite">
@@ -242,13 +252,8 @@ function query(filters: Filters, override: Partial<Filters> = {}): string {
 
 /** The rail: federation as a list with live counts, the rest as a small form. Below 1024 px it
  * folds into a disclosure so the results stay first on a phone. */
-function FilterRail({
-  filters,
-  coverage,
-}: {
-  filters: Filters;
-  coverage: Coverage;
-}) {
+async function FilterRail({ filters }: { filters: Filters }) {
+  const coverage = await api.coverage();
   const played = coverage.providers
     .flatMap((p) => [p.first_played, p.last_played])
     .filter(Boolean)

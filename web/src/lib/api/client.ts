@@ -17,6 +17,7 @@ export type TournamentDetail = Schemas["TournamentDetail"];
 export type TournamentMatchPage = Schemas["TournamentMatchPage"];
 export type TournamentMatch = Schemas["TournamentMatch"];
 export type Coverage = Schemas["Coverage"];
+export type HeadToHead = Schemas["HeadToHead"];
 
 export class ApiError extends Error {
   constructor(
@@ -55,9 +56,11 @@ async function get<T>(path: string, query?: Query): Promise<T> {
   }
   if (response.status === 404) notFound();
   if (response.status === 308) {
-    const target = response.headers
-      .get("location")
-      ?.match(/\/v1\/players\/(\d+)/);
+    const location = response.headers.get("location") ?? "";
+    // a merged id: the comparison keeps its pair, a profile goes to the canonical player
+    const pair = location.match(/\/v1\/players\/(\d+)\/head-to-head\/(\d+)/);
+    if (pair) permanentRedirect(`/players/${pair[1]}/vs/${pair[2]}`);
+    const target = location.match(/\/v1\/players\/(\d+)/);
     if (target) permanentRedirect(`/players/${target[1]}`);
   }
   if (!response.ok) throw new ApiError(response.status, path);
@@ -75,4 +78,6 @@ export const api = {
   tournamentMatches: (id: number, query: Query) =>
     get<TournamentMatchPage>(`/v1/tournaments/${id}/matches`, query),
   coverage: () => get<Coverage>("/v1/coverage"),
+  headToHead: (a: number, b: number) =>
+    get<HeadToHead>(`/v1/players/${a}/head-to-head/${b}`),
 };

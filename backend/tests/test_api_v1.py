@@ -437,3 +437,76 @@ async def test_a_file_archive_is_listed_as_an_archive_never_as_connected(
     data.flush()
     body = (await api.get("/v1/coverage")).json()
     assert status() == "historical_archive"
+
+
+async def test_head_to_head_counts_meetings_and_wins_from_a_side(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    alex, sam = player_id(data, "Alex TESTER"), player_id(data, "Sam EXAMPLE")
+    h = (await api.get(f"/v1/players/{alex}/head-to-head/{sam}")).json()
+    # the singles win and the walkover; the junior match against Alex is never served
+    assert (h["meetings"], h["decided"], h["a_won"], h["b_won"], h["walkovers"]) == (2, 2, 2, 0, 1)
+    assert all(m["result"] == "won" for m in h["matches"])
+    assert h["by_discipline"] == [{"discipline": "MS", "a_won": 2, "b_won": 0}]
+    assert h["last_met"] is not None and all(m["source"] for m in h["matches"])
+    other_way = (await api.get(f"/v1/players/{sam}/head-to-head/{alex}")).json()
+    assert (other_way["a_won"], other_way["b_won"]) == (0, 2)
+
+
+async def test_head_to_head_needs_opposite_sides(api: httpx.AsyncClient, data: Session) -> None:
+    kim, lee = player_id(data, "Kim SAMPLE"), player_id(data, "Lee PLACEHOLDER")
+    pat = player_id(data, "Pat DUMMY")
+    partners = (await api.get(f"/v1/players/{kim}/head-to-head/{lee}")).json()
+    assert partners["meetings"] == 0  # partners are not opponents
+    opp = (await api.get(f"/v1/players/{kim}/head-to-head/{pat}")).json()
+    assert (opp["meetings"], opp["a_won"], opp["b_won"]) == (1, 0, 1)
+    assert opp["matches"][0]["games"] == [[19, 21], [21, 17], [15, 21]]  # Kim's points first
+
+
+async def test_head_to_head_guards_identity(api: httpx.AsyncClient, data: Session) -> None:
+    alex, sam = player_id(data, "Alex TESTER"), player_id(data, "Sam EXAMPLE")
+    assert (await api.get(f"/v1/players/{alex}/head-to-head/{alex}")).status_code == 422
+    s = data.get(Player, sam)
+    assert s is not None
+    s.withheld_at = datetime.now(UTC)
+    data.flush()
+    assert (await api.get(f"/v1/players/{alex}/head-to-head/{sam}")).status_code == 404
+    assert (await api.get(f"/v1/players/{sam}/head-to-head/{alex}")).status_code == 404
+
+
+async def test_head_to_head_follows_merges(api: httpx.AsyncClient, data: Session) -> None:
+    kim, pat = player_id(data, "Kim SAMPLE"), player_id(data, "Pat DUMMY")
+    lee = data.get(Player, player_id(data, "Lee PLACEHOLDER"))
+    assert lee is not None
+    lee.merged_into_id = kim  # as if a person had merged them
+    data.flush()
+    r = await api.get(f"/v1/players/{lee.id}/head-to-head/{pat}")
+    assert r.status_code == 308
+    assert r.headers["location"] == f"/v1/players/{kim}/head-to-head/{pat}"
+
+
+async def test_profile_periods_and_formats_add_up(api: httpx.AsyncClient, data: Session) -> None:
+    body = (await api.get(f"/v1/players/{player_id(data, 'Alex TESTER')}")).json()
+    all_time = next(p for p in body["periods"] if p["since"] is None)
+    assert (all_time["won"], all_time["lost"]) == (body["record"]["won"], body["record"]["lost"])
+    assert [f["format"] for f in body["by_format"]] == ["singles"]
+    assert sum(f["won"] + f["lost"] for f in body["by_format"]) == body["record"]["played"]
+
+
+def test_period_windows_are_calendar_years() -> None:
+    from scout.api_v1 import years_before
+
+    assert years_before(date(2026, 11, 14), 3) == date(2023, 11, 14)
+    assert years_before(date(2028, 2, 29), 1) == date(2027, 2, 28)
+
+
+async def test_two_ids_of_one_person_compare_to_their_profile(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    kim = player_id(data, "Kim SAMPLE")
+    lee = data.get(Player, player_id(data, "Lee PLACEHOLDER"))
+    assert lee is not None
+    lee.merged_into_id = kim
+    data.flush()
+    r = await api.get(f"/v1/players/{lee.id}/head-to-head/{kim}")
+    assert r.status_code == 308 and r.headers["location"] == f"/v1/players/{kim}"
