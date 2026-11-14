@@ -135,6 +135,11 @@ _TS_PORTAL_VERIFIED = {
     "canada": "2026-11-13: listing works (40); 7 of 7 tournaments yield no match rows (the "
     "endpoint answers 'No matches found' or the runtime reports a login): not validated",
 }
+# Portals whose own date-range search (findTournaments) was checked live; the others keep only
+# the recent-listing search until they are checked too
+_TS_FIND_VERIFIED = {
+    "bnz": "2026-11-14: 2025-03-01..04-30 answered 20 listings, all on bnz., no login",
+}
 _TS_BA_EVIDENCE = (
     "matchesInDay learned 2026-11-12 with `api-anything add` from two distinct tournament/day "
     "inputs, held-out third tournament verified, 438/438 fields equal to an independent parse."
@@ -161,6 +166,19 @@ _BASE_OPERATIONS: Mapping[str, ApprovedOperation] = MappingProxyType(
             update_frequency="daily; pages are cumulative (page N lists the first 20*N)",
             evidence="Hand-derived from the home page markup. 4 inputs verified, 20/20 equal to an "
             "independent parse.",
+        ),
+        "tournamentsoftware_ba.find_tournaments": ApprovedOperation(
+            source_id="tournamentsoftware_ba",
+            site="tournamentsoftware-ba",
+            op="findTournaments",
+            model=TsTournament,
+            params=frozenset({"page", "start", "end"}),
+            record_key=ts_tournament_key,
+            attribution="Badminton Australia via Tournament Software (ba.tournamentsoftware.com)",
+            update_frequency="history: each window once; pages are cumulative (first 20*N)",
+            evidence="The www find_badminton request on ba. (no SportID: the portal is badminton "
+            "only); /find/tournament is not robots-disallowed. 2026-11-14: 2025-03 answered 14 "
+            "listings, all relative to ba., no login or challenge.",
         ),
         "tournamentsoftware_www.find_badminton": ApprovedOperation(
             source_id="tournamentsoftware",
@@ -234,6 +252,15 @@ def _federation_ops() -> dict[str, ApprovedOperation]:
                 attribution=f"{federation} via Tournament Software ({host})",
                 evidence="The ba. operation on this portal. Live check: "
                 + _TS_PORTAL_VERIFIED.get(key, "not yet run"),
+            )
+        if key in _TS_FIND_VERIFIED:
+            ops[f"tournamentsoftware_{key}.find_tournaments"] = replace(
+                _BASE_OPERATIONS["tournamentsoftware_ba.find_tournaments"],
+                source_id=f"tournamentsoftware_{key}",
+                site=f"tournamentsoftware-{key}",
+                attribution=f"{federation} via Tournament Software ({host})",
+                evidence="The ba. date-range search on this portal. Live check: "
+                + _TS_FIND_VERIFIED[key],
             )
     return ops
 
