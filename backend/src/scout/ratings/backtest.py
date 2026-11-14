@@ -237,3 +237,35 @@ def tune(name: str, rows: Sequence[Row], splits: Splits) -> list[Trial]:
             preds = run(name, config, rows, by_round=by_round)
             trials.append(Trial(name, config, by_round, validation_log_loss(preds, splits)))
     return sorted(trials, key=lambda t: t.validation_log_loss)
+
+
+def affected_from(old: Sequence[Row], new: Sequence[Row]) -> date | None:
+    """The earliest day whose eligible matches differ between two snapshots: an added, removed
+    or corrected match, or a changed player id (a merge or split). None when nothing changed."""
+    before = {r.match_id: r for r in old}
+    after = {r.match_id: r for r in new}
+    days = [r.day for k, r in before.items() if after.get(k) != r]
+    days += [r.day for k, r in after.items() if before.get(k) != r]
+    return min(days, default=None)
+
+
+def incremental(
+    name: str,
+    config: dict[str, Any],
+    base: Sequence[Prediction],
+    old: Sequence[Row],
+    new: Sequence[Row],
+    *,
+    by_round: bool = True,
+) -> tuple[list[Prediction], date | None]:
+    """Predictions for `new`, keeping `base` (made on `old`) before the earliest affected day.
+    Ratings are path-dependent, so everything from that day on is recomputed. The state at that
+    day is re-derived by replaying the unchanged earlier matches: at this scale (a full BWF replay
+    takes seconds) a stored checkpoint is not worth its complexity. Tests check the result is
+    identical to a full rebuild."""
+    since = affected_from(old, new)
+    if since is None:
+        return list(base), None
+    fresh = [p for p in run(name, config, new, by_round=by_round) if p.day >= since]
+    kept = [p for p in base if p.day < since]
+    return sorted(kept + fresh, key=lambda p: (p.day, p.match_id)), since

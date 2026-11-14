@@ -75,7 +75,7 @@ def identity(conn: Connection, source: str = BWF_SOURCE) -> IdentityAudit:
     return audit
 
 
-def _key(name: str) -> str:
+def name_key(name: str) -> str:
     """Names compared loosely: accents, case and punctuation ignored."""
     plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     return " ".join(sorted(re.findall(r"[a-z]+", plain.lower())))
@@ -112,7 +112,7 @@ def cross_source_duplicates(conn: Connection, window_days: int = 1) -> dict[str,
     ts: list[tuple[str, str, date]] = []
     rows = conn.execute(text(_SINGLES), {"bwf": BWF_SOURCE, "lo": lo, "hi": hi})
     for source, day, disc, names in rows:
-        pair = "/".join(sorted(_key(n) for n in str(names).split("|")))
+        pair = "/".join(sorted(name_key(n) for n in str(names).split("|")))
         if source == BWF_SOURCE:
             bwf[(disc, pair)].append(day)
         else:
