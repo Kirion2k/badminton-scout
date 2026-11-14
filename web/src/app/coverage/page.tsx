@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { FedCode, RowsSkeleton, Section, Stat } from "@/components/bits";
-import { Hero, Shell } from "@/components/shell";
+import { FedCode, RowsSkeleton, Section } from "@/components/bits";
+import { Shell } from "@/components/shell";
 import { type Coverage, api } from "@/lib/api/client";
 import { formatDate, formatMoment, formatNextSync } from "@/lib/format";
 import { FEDERATION, PROVIDER_STATUS, SYNC_STATUS } from "@/lib/providers";
@@ -10,32 +10,27 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Data coverage" };
 
+// status as words in a tone, not filled chips: green good, ink partial, grey waiting, red bad
 const TONE = {
-  good: "bg-win text-white",
-  partial: "bg-muted text-foreground",
-  waiting: "bg-muted text-muted-foreground",
-  bad: "bg-loss text-white",
+  good: "text-win",
+  partial: "text-foreground",
+  waiting: "text-muted-foreground",
+  bad: "text-loss",
 };
 
 export default function CoveragePage() {
   return (
-    <Shell
-      hero={
-        <Hero>
-          <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
-            Coverage
-          </p>
-          <h1 className="display mt-3 text-[44px] leading-[0.95] uppercase sm:text-[64px]">
-            Data coverage
-          </h1>
-          <p className="mt-4 max-w-2xl pb-10 text-[16px] text-on-dark-muted">
-            Where every record comes from, how fresh it is, and what is not yet
-            covered. A federation listed here means some of its tournaments are
-            imported, not all of them.
-          </p>
-        </Hero>
-      }
-    >
+    <Shell>
+      <header className="max-w-3xl pb-6">
+        <h1 className="display text-[32px] leading-[1.05] sm:text-[42px]">
+          Data coverage
+        </h1>
+        <p className="mt-2 text-[15px] text-muted-foreground">
+          Where every record comes from, how fresh it is, and what is not yet
+          covered. A federation listed here means some of its tournaments are
+          imported, not all of them.
+        </p>
+      </header>
       <Suspense fallback={<RowsSkeleton rows={6} />}>
         <Ledger />
       </Suspense>
@@ -46,42 +41,37 @@ export default function CoveragePage() {
 async function Ledger() {
   const c = await api.coverage();
   return (
-    <div className="space-y-16">
-      <dl className="grid grid-cols-2 gap-x-10 gap-y-8 rounded-[10px] bg-card p-6 ring-1 ring-border md:grid-cols-4">
-        {[
-          [c.public_tournaments, "public tournaments"],
-          [c.public_matches, "public matches"],
-          [c.public_players, "players"],
-          [c.awaiting_import, "tournaments awaiting import"],
-        ].map(([value, label]) => (
-          <div key={label}>
-            <dt className="sr-only">{label}</dt>
-            <dd>
-              <Stat
-                value={Number(value).toLocaleString("en-AU")}
-                label={String(label)}
-              />
-            </dd>
-          </div>
-        ))}
-      </dl>
+    <div className="space-y-10">
+      <p className="num max-w-[65ch] border-t-2 border-b border-t-form border-b-border py-3 text-[15px]">
+        {c.public_tournaments.toLocaleString("en-AU")} public tournaments,{" "}
+        {c.public_matches.toLocaleString("en-AU")} matches and{" "}
+        {c.public_players.toLocaleString("en-AU")} players.{" "}
+        <span className="text-muted-foreground">
+          {c.awaiting_import.toLocaleString("en-AU")} more tournaments are
+          listed and awaiting import.
+        </span>
+      </p>
 
       <Section title="Data freshness">
         <dl className="grid gap-6 pt-5 sm:grid-cols-2">
           <div>
-            <dt className="label-quiet">Last successful sync</dt>
+            <dt className="text-[13px] text-muted-foreground">
+              Last successful sync
+            </dt>
             <dd className="mt-1.5 text-[16px]">
               {formatMoment(c.last_sync_at) ?? "No sync has run yet"}
             </dd>
           </div>
           <div>
-            <dt className="label-quiet">Next scheduled sync</dt>
+            <dt className="text-[13px] text-muted-foreground">
+              Next scheduled sync
+            </dt>
             <dd className="mt-1.5 text-[16px]">
               {formatNextSync(c.next_sync_at)}
             </dd>
           </div>
         </dl>
-        <p className="mt-4 max-w-2xl text-[14px] text-muted-foreground">
+        <p className="mt-4 max-w-[65ch] text-[14px] text-pretty text-muted-foreground">
           A scheduled job imports new and corrected results within each
           provider’s daily request allowance. Pages read our database only; they
           never contact the providers. Awaiting import counts listings, not
@@ -93,7 +83,7 @@ async function Ledger() {
 
       <div className="grid gap-12 md:grid-cols-2">
         <Section title="How players are identified">
-          <div className="space-y-3 pt-4 text-[14px] text-muted-foreground">
+          <div className="max-w-[65ch] space-y-3 pt-4 text-[14px] text-pretty text-muted-foreground">
             <p>
               Records are joined automatically only on a stable identifier
               issued by the same federation, and only when nothing conflicts.
@@ -106,7 +96,7 @@ async function Ledger() {
           </div>
         </Section>
         <Section title="Sourced and calculated">
-          <div className="space-y-3 pt-4 text-[14px] text-muted-foreground">
+          <div className="max-w-[65ch] space-y-3 pt-4 text-[14px] text-pretty text-muted-foreground">
             <p>
               <span className="text-foreground">Sourced, as published:</span>{" "}
               names, tournaments, dates, events, rounds, scores, walkovers,
@@ -154,12 +144,12 @@ function Federations({ coverage }: { coverage: Coverage }) {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <FedCode code={fed?.code ?? "—"} />
-                  <h3 className="display text-[22px] uppercase">
+                  <h3 className="display text-[22px]">
                     {fed?.country ?? fed?.label ?? p.name}
                   </h3>
                   <span
                     className={cn(
-                      "rounded px-2 py-0.5 font-display text-[12px] font-semibold tracking-[0.08em] uppercase",
+                      "text-[13px] font-semibold",
                       TONE[status.tone],
                     )}
                   >

@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-barlow);
+  --font-sans: var(--font-archivo);
   --font-mono: ui-monospace, monospace;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -48,43 +48,37 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Badminton Scout tokens (docs/design.md): a premium badminton match centre. Light body, dark
-   "court" surfaces for heroes and the shell. Lime is the shuttle: winner markers, the active
-   state and the brand, never body text on light. Contrast checked (all text pairs >= 4.5:1). */
+/* Mynton tokens (DESIGN.md): a badminton reference read like an umpire's scoresheet. White
+   ground, ink, form-print green for rules and won results, ballpoint blue reserved for the player
+   being viewed, pencil grey for the other side. Every text pair is measured >= 4.5:1. */
 :root {
-  --background: #f6f5f1;
-  --foreground: #0b1526;
+  --background: #ffffff;
+  --foreground: #14171a;
   --card: #ffffff;
-  --card-foreground: #0b1526;
+  --card-foreground: #14171a;
   --popover: #ffffff;
-  --popover-foreground: #0b1526;
-  --primary: #0b1526;
+  --popover-foreground: #14171a;
+  --primary: #0b5d44;
   --primary-foreground: #ffffff;
-  --secondary: #eceae3;
-  --secondary-foreground: #0b1526;
-  --muted: #eceae3;
-  --muted-foreground: #545e6e;
-  --accent: #eceae3;
-  --accent-foreground: #0b1526;
-  --destructive: #b42318;
-  --border: #e2dfd6;
-  --input: #d6d2c6;
-  --ring: #0b1526;
-  --radius: 0.625rem;
-  --subtle: #5c6576;
-  --accent-ink: #4a6b00;
-  --win: #157a3c;
-  --loss: #b42318;
-  --neutral-status: #545e6e;
-  /* the dark surfaces: midnight (shell, Discover, player) and court green (tournaments) */
-  --night: #0b1526;
-  --night-2: #13213a;
-  --court: #0d3b2c;
-  --court-2: #134a38;
-  --on-dark: #ffffff;
-  --on-dark-muted: #aab5c6;
-  --on-court-muted: #a9c4b8;
-  --lime: #c8f031;
+  --secondary: #f2f4f1;
+  --secondary-foreground: #14171a;
+  --muted: #f2f4f1;
+  --muted-foreground: #5d636b;
+  --accent: #f2f4f1;
+  --accent-foreground: #14171a;
+  --destructive: #a3271c;
+  --border: #dcdfd9;
+  --input: #c3c8c0;
+  --ring: #1f3fbf;
+  --radius: 0.375rem;
+  --subtle: #5d636b;
+  --form: #0b5d44;
+  --you: #1f3fbf;
+  --win: #0b5d44;
+  --loss: #a3271c;
+  --wash: #f2f4f1;
+  --sheet: #b9c7bf;
+  --neutral-status: #5d636b;
 }
 
 @theme inline {
@@ -92,16 +86,10 @@
   --color-loss: var(--loss);
   --color-neutral-status: var(--neutral-status);
   --color-subtle: var(--subtle);
-  --color-accent-ink: var(--accent-ink);
-  --color-night: var(--night);
-  --color-night-2: var(--night-2);
-  --color-court: var(--court);
-  --color-court-2: var(--court-2);
-  --color-on-dark: var(--on-dark);
-  --color-on-dark-muted: var(--on-dark-muted);
-  --color-on-court-muted: var(--on-court-muted);
-  --color-lime: var(--lime);
-  --font-display: var(--font-barlow-condensed);
+  --color-form: var(--form);
+  --color-you: var(--you);
+  --color-wash: var(--wash);
+  --color-sheet: var(--sheet);
 }
 
 @layer base {
@@ -110,24 +98,29 @@
   }
   html {
     color-scheme: light;
-    /* keep focused or scrolled-to elements clear of the top bar and a sticky round heading */
-    scroll-padding-top: 7.5rem;
+    /* keep focused or scrolled-to elements clear of the sticky top bar and a round heading */
+    scroll-padding-top: 6.5rem;
   }
   body {
     @apply bg-background text-foreground;
     font-size: 15px;
+    line-height: 1.45;
     touch-action: manipulation;
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: #d6def8;
+    color: var(--foreground);
+  }
+  a {
+    text-underline-offset: 3px;
   }
   .num {
     font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum";
   }
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
-  }
-  .on-dark :focus-visible {
-    outline-color: var(--lime);
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -141,39 +134,17 @@
 
 @layer components {
   .control {
-    @apply h-10 rounded-lg border border-input bg-card px-3 text-sm text-foreground transition-colors placeholder:text-subtle hover:border-foreground/30;
+    @apply h-11 rounded-md border border-input bg-card px-3 lg:h-9 text-sm text-foreground transition-colors placeholder:text-subtle hover:border-foreground/40;
   }
-  /* competition metadata: short, uppercase, condensed */
-  .label-quiet {
-    @apply font-display text-[12px] font-semibold tracking-[0.12em] text-muted-foreground uppercase;
-  }
+  /* names and headings: Archivo at its condensed width */
   .display {
-    font-family: var(--font-display), "Arial Narrow", sans-serif;
     font-weight: 700;
-    letter-spacing: -0.005em;
+    font-stretch: 78%;
+    letter-spacing: -0.012em;
   }
-  /* a half court, drawn to scale (6.10 x 6.70 m: tramlines, service lines, centre line) */
-  .court-lines {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 610 670' fill='none' stroke='white' stroke-opacity='0.13' stroke-width='4'%3E%3Crect x='2' y='2' width='606' height='666'/%3E%3Cpath d='M48 2v666M562 2v666M2 78h606M2 470h606M305 78v392'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-size: auto 92%;
-    background-position: right -9rem bottom;
-  }
-  @media (min-width: 1024px) {
-    .court-lines {
-      background-size: auto 112%;
-      background-position: right 3% top 30%;
-    }
-  }
-  /* a score or stat settling into place on navigation (off for reduced motion) */
-  .reveal {
-    animation: reveal 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  }
-}
-
-@keyframes reveal {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
+  /* a section heading: green, condensed, over a green hairline, like a printed form */
+  .sheet-head {
+    @apply flex items-baseline justify-between gap-4 border-b border-form pb-1.5 text-[15px] font-bold text-form;
+    font-stretch: 80%;
   }
 }

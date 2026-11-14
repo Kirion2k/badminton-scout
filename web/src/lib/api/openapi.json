@@ -123,6 +123,20 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "winner": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PlayerRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winner"
           }
         },
         "required": ["name", "discipline", "matches"],

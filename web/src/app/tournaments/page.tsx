@@ -5,7 +5,6 @@ import { Suspense } from "react";
 
 import {
   BUTTON_QUIET,
-  DateBlock,
   EmptyState,
   FedCode,
   LINK,
@@ -13,7 +12,7 @@ import {
   RowsSkeleton,
   Select,
 } from "@/components/bits";
-import { Hero, Shell } from "@/components/shell";
+import { Shell } from "@/components/shell";
 import { Input } from "@/components/ui/input";
 import { type Coverage, type TournamentSummary, api } from "@/lib/api/client";
 import {
@@ -39,22 +38,16 @@ export default function TournamentsPage({
   searchParams,
 }: PageProps<"/tournaments">) {
   return (
-    <Shell
-      hero={
-        <Hero>
-          <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
-            Competitions
-          </p>
-          <h1 className="display mt-3 text-[44px] leading-[0.95] uppercase sm:text-[64px]">
-            Tournaments
-          </h1>
-          <p className="mt-4 max-w-2xl pb-10 text-[16px] text-on-dark-muted">
-            Every tournament with published results, from every connected
-            federation. Open one for its match centre.
-          </p>
-        </Hero>
-      }
-    >
+    <Shell>
+      <header className="max-w-3xl pb-6">
+        <h1 className="display text-[32px] leading-[1.05] sm:text-[42px]">
+          Tournaments
+        </h1>
+        <p className="mt-2 text-[15px] text-muted-foreground">
+          Every tournament with published results, from every connected
+          federation. Open one for its results by discipline, event and round.
+        </p>
+      </header>
       <Suspense fallback={<RowsSkeleton rows={10} />}>
         <TournamentList searchParams={searchParams} />
       </Suspense>
@@ -98,12 +91,8 @@ async function TournamentList({
     <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12">
       <FilterRail filters={filters} coverage={coverage} />
       <section aria-labelledby="results-heading" className="min-w-0">
-        <div className="flex flex-wrap items-baseline justify-between gap-3 border-b-2 border-foreground pb-2">
-          <h2
-            id="results-heading"
-            className="display text-[22px] uppercase"
-            aria-live="polite"
-          >
+        <div className="sheet-head flex-wrap">
+          <h2 id="results-heading" aria-live="polite">
             <span className="num">{data.total.toLocaleString("en-AU")}</span>{" "}
             {filtered
               ? "tournaments match"
@@ -151,13 +140,13 @@ async function TournamentList({
               ([month, items]) => (
                 <div key={month}>
                   {month && (
-                    <h3 className="label-quiet sticky top-14 z-10 bg-background/95 pt-6 pb-2 backdrop-blur lg:top-0">
+                    <h3 className="sticky top-14 z-10 bg-background/95 pt-5 pb-1.5 text-[14px] font-semibold backdrop-blur-sm">
                       {month}
                     </h3>
                   )}
                   <ul
                     aria-label={month || "Tournaments"}
-                    className="divide-y border-b last:border-b-0"
+                    className="border-t border-border"
                   >
                     {items.map((t) => (
                       <TournamentRow key={t.id} tournament={t} />
@@ -202,58 +191,43 @@ function byMonth(
   return groups;
 }
 
-/** One row: date block, the title leading, then place and federation, completeness and counts.
- * The title's stretched link makes the whole row the hit area but the only tab stop. */
+/** One row in reference order: date, the title, then place, federation and completeness, then
+ * the match count. The title's stretched link makes the row the hit area but one tab stop. */
 function TournamentRow({ tournament: t }: { tournament: TournamentSummary }) {
   const fed = FEDERATION[t.source_id];
   const flag = importFlag(t.import_state);
   return (
-    <li className="group relative grid grid-cols-[3.75rem_minmax(0,1fr)] gap-x-4 gap-y-1 py-4 transition-colors duration-150 hover:bg-card sm:grid-cols-[4.5rem_minmax(0,1fr)_7rem] sm:px-2">
-      <DateBlock iso={t.start_date} />
+    <li className="group relative grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-border px-1 py-2.5 hover:bg-wash">
+      <span className="num text-[13px] text-muted-foreground">
+        {formatDateRange(t.start_date, t.end_date)
+          .replace(/ \d{4}/g, "")
+          .replace(/ – .*/, "")}
+      </span>
       <div className="min-w-0">
         <Link
           href={`/tournaments/${t.id}`}
-          className="text-[16px] leading-snug font-semibold text-pretty after:absolute after:inset-0 group-hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-ring"
+          className="leading-snug font-semibold text-pretty after:absolute after:inset-0 group-hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-ring"
         >
           {t.name ?? "Unnamed tournament"}
         </Link>
-        <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] text-muted-foreground">
-          <span className="num">
-            {formatDateRange(t.start_date, t.end_date)}
-          </span>
-          {t.location && (
-            <>
-              <span aria-hidden className="text-subtle">
-                ·
-              </span>
-              <span className="truncate">{t.location}</span>
-            </>
-          )}
-        </p>
-        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-subtle">
+        <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
           {fed && <FedCode code={fed.code} />}
-          <span>{fed?.label ?? t.source_id}</span>
+          <span>{fed?.country ?? fed?.label ?? t.source_id}</span>
+          {t.location && <span className="truncate">· {t.location}</span>}
           {flag && (
-            <span
-              title={t.import_state?.note}
-              className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80"
-            >
-              {flag}
+            <span title={t.import_state?.note} className="text-foreground">
+              · {flag}
             </span>
           )}
-          <span className="num sm:hidden">
-            · {t.matches.toLocaleString("en-AU")} matches
-          </span>
         </p>
       </div>
-      <p className="num hidden text-right sm:block">
-        <span className="display text-[28px] leading-none">
-          {t.matches.toLocaleString("en-AU")}
-        </span>
-        <span className="block text-[12px] text-subtle">
+      <span className="num text-right text-[13px] text-muted-foreground">
+        {t.matches.toLocaleString("en-AU")}
+        <span className="hidden sm:inline">
+          {" "}
           matches · {t.events} {t.events === 1 ? "event" : "events"}
         </span>
-      </p>
+      </span>
     </li>
   );
 }
@@ -387,7 +361,7 @@ function FilterRail({
           </button>
         </form>
         <nav aria-label="Federations">
-          <p className="label-quiet mb-2">Federation</p>
+          <p className="sheet-head mb-1">Federation</p>
           <ul className="space-y-0.5 text-[14px]">
             <li>
               <FederationLink
@@ -436,19 +410,17 @@ function FederationLink({
       href={href}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "flex h-9 items-center justify-between gap-3 rounded-lg px-3 transition-colors",
+        "flex h-11 items-center justify-between gap-3 rounded-md px-3 transition-colors lg:h-9",
         current
-          ? "bg-night font-medium text-on-dark"
+          ? "bg-form font-medium text-white"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
-        {code && <FedCode code={code} dark={current} />}
+        {code && <FedCode code={code} onDark={current} />}
         <span className="truncate">{label}</span>
       </span>
-      <span className="num text-[12px] opacity-80">
-        {count.toLocaleString("en-AU")}
-      </span>
+      <span className="num text-[12px]">{count.toLocaleString("en-AU")}</span>
     </Link>
   );
 }

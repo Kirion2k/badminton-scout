@@ -1,38 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed } from "next/font/google";
+import { Archivo } from "next/font/google";
 import "./globals.css";
 
-// Barlow for reading, Barlow Condensed for competition headings, scores and labels
-const barlow = Barlow({
-  variable: "--font-barlow",
+// one family, two voices: condensed width for names and headings, regular width for reading
+const archivo = Archivo({
+  variable: "--font-archivo",
   subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600"],
+  axes: ["wdth"],
 });
 
-const barlowCondensed = Barlow_Condensed({
-  variable: "--font-barlow-condensed",
-  subsets: ["latin", "latin-ext"],
-  weight: ["500", "600", "700"],
-});
-
-export const viewport: Viewport = { themeColor: "#0b1526" };
+export const viewport: Viewport = { themeColor: "#ffffff" };
 
 export const metadata: Metadata = {
-  title: { default: "Badminton Scout", template: "%s · Badminton Scout" },
+  title: { default: "Mynton", template: "%s · Mynton" },
   description:
-    "Badminton match records and player profiles, with every number traced to its source.",
+    "Badminton players, tournaments and results from many federations, every number traced to its source.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}
-    >
+    <html lang="en" className={`${archivo.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-lime focus:px-3 focus:py-2 focus:text-night"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-foreground focus:px-3 focus:py-2 focus:text-background"
         >
           Skip to content
         </a>

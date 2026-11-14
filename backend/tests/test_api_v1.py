@@ -14,7 +14,15 @@ from scout.db import get_session
 from scout.ingest.operations import TsMatchRow
 from scout.ingest.tournamentsoftware import ingest_rows
 from scout.main import create_app
-from scout.models import Event, IngestRun, Player, PlayerLink, SourcePlayer, Tournament
+from scout.models import (
+    Event,
+    IngestRun,
+    Match,
+    Player,
+    PlayerLink,
+    SourcePlayer,
+    Tournament,
+)
 
 from .ts_fixtures import DOUBLES, WALKOVER, row
 
@@ -387,3 +395,29 @@ async def test_a_winner_without_a_score_counts_and_says_so(
     history = (await api.get(f"/v1/players/{alex}/matches")).json()["items"]
     final = next(m for m in history if m["round"] == "Final" and m["status"] == "winner_only")
     assert final["games"] == [] and final["result"] == "won"
+
+
+async def test_event_winner_comes_only_from_a_decided_final(
+    api: httpx.AsyncClient, data: Session
+) -> None:
+    t = data.scalars(select(Tournament).where(Tournament.source_key != JUNIOR_GUID)).one()
+    body = (await api.get(f"/v1/tournaments/{t.id}")).json()
+    assert all(e["winner"] is None for e in body["events"])  # no round is called a final yet
+    # one singles match Alex won becomes that event's final
+    singles_ids = select(Event.id).where(Event.tournament_id == t.id, Event.discipline == "MS")
+    final_id = data.scalars(
+        select(Match.id).where(Match.event_id.in_(singles_ids), Match.winner_side == 1)
+    ).first()
+    data.execute(update(Match).where(Match.id == final_id).values(round=" Final "))
+    data.flush()
+    body = (await api.get(f"/v1/tournaments/{t.id}")).json()
+    singles = next(e for e in body["events"] if e["discipline"] == "MS")
+    assert [p["name"] for p in singles["winner"]] == ["Alex TESTER"]
+    # a second "final" in the same event is ambiguous: no winner rather than a guess
+    other = data.scalars(
+        select(Match.id).where(Match.event_id.in_(singles_ids), Match.id != final_id)
+    ).first()
+    data.execute(update(Match).where(Match.id == other).values(round="Final"))
+    data.flush()
+    body = (await api.get(f"/v1/tournaments/{t.id}")).json()
+    assert next(e for e in body["events"] if e["discipline"] == "MS")["winner"] is None

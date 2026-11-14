@@ -1,4 +1,3 @@
-import { Building2, CalendarDays, Info, MapPin } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,12 +6,13 @@ import { Suspense } from "react";
 import {
   BUTTON_QUIET,
   EmptyState,
+  FedCode,
   Pager,
   RowsSkeleton,
   Select,
 } from "@/components/bits";
-import { Scoreboard } from "@/components/scoreboard";
-import { Container, Hero, Shell } from "@/components/shell";
+import { People, ResultRow } from "@/components/scoresheet";
+import { Shell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type TournamentDetail, api } from "@/lib/api/client";
 import { DISCIPLINES, formatDateRange, one, positiveInt } from "@/lib/format";
@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = { title: "Tournament" };
 
 const PAGE_SIZE = 60;
-const CHIP_LIMIT = 24; // more events than this in one view: a menu instead of chips
+const LIST_LIMIT = 30; // more events than this in one view: a menu instead of a list
 const ORDER = ["MS", "WS", "MD", "WD", "XD"];
 
 export default function TournamentPage({
@@ -30,13 +30,11 @@ export default function TournamentPage({
   searchParams,
 }: PageProps<"/tournaments/[id]">) {
   return (
-    <Shell
-      hero={
-        <Suspense fallback={<MatchCentreSkeleton />}>
-          <MatchCentre params={params} searchParams={searchParams} />
-        </Suspense>
-      }
-    />
+    <Shell>
+      <Suspense fallback={<PageSkeleton />}>
+        <Tournament params={params} searchParams={searchParams} />
+      </Suspense>
+    </Shell>
   );
 }
 
@@ -50,7 +48,7 @@ function href(id: number, view: View) {
   return `/tournaments/${id}${s ? `?${s}` : ""}`;
 }
 
-async function MatchCentre({
+async function Tournament({
   params,
   searchParams,
 }: PageProps<"/tournaments/[id]">) {
@@ -72,10 +70,15 @@ async function MatchCentre({
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   });
-  // one event: its stages (rounds) are the groups; otherwise each event is a group
+  // one event: its rounds are the groups; otherwise each event is a group
   const groups = selected
     ? groupBy(matches.items, (m) => m.round ?? "Round not recorded")
     : groupBy(matches.items, (m) => m.event);
+  const winners = new Map(
+    detail.events
+      .filter((e) => e.winner?.length)
+      .map((e) => [e.name, e.winner!]),
+  );
   const title = selected
     ? selected.name
     : discipline
@@ -84,20 +87,21 @@ async function MatchCentre({
 
   return (
     <>
-      <TournamentHero id={id} detail={detail} view={view} />
-      <Container>
-        <EventChips id={id} detail={detail} view={view} />
-        <ImportNote detail={detail} />
-        <section aria-labelledby="matches-heading" className="min-w-0">
-          <div className="flex items-baseline justify-between gap-3 pb-1">
-            <h2 id="matches-heading" className="display text-[26px] uppercase">
-              {title}
-            </h2>
-            <span className="label-quiet num">
+      <Header detail={detail} />
+      <Disciplines id={id} detail={detail} view={view} />
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        <section
+          aria-labelledby="matches-heading"
+          className="min-w-0 lg:order-1"
+        >
+          <div className="sheet-head">
+            <h2 id="matches-heading">{title}</h2>
+            <span className="num text-[13px] font-normal text-muted-foreground [font-stretch:100%]">
               {matches.total.toLocaleString("en-AU")}{" "}
-              {matches.total === 1 ? "match" : "matches"}
+              {matches.total === 1 ? "match" : "matches"} · winner first
             </span>
           </div>
+          {selected && <EventWinner event={selected} />}
           {matches.items.length === 0 ? (
             <EmptyState
               title={
@@ -107,37 +111,51 @@ async function MatchCentre({
               }
             >
               {page > 1 && matches.total > 0 && (
-                <Link
-                  className="underline underline-offset-[3px]"
-                  href={href(id, view)}
-                >
+                <Link className="underline" href={href(id, view)}>
                   Back to the first page
                 </Link>
               )}
             </EmptyState>
           ) : (
-            groups.map(([name, rows], i) => (
-              <section key={`${name}-${i}`} aria-label={name} className="pt-6">
-                <h3 className="sticky top-14 z-10 -mx-1 flex items-center gap-3 bg-background/95 px-1 py-2.5 backdrop-blur lg:top-16">
-                  <span className="font-display text-[15px] font-bold tracking-[0.1em] uppercase">
-                    {name}
-                  </span>
+            groups.map(([name, rows]) => (
+              <section key={name} aria-label={name} className="mt-5">
+                <h3 className="sticky top-14 z-10 flex items-baseline gap-3 bg-background/95 px-2 py-1.5 text-[16px] font-bold [font-stretch:80%] backdrop-blur-sm">
+                  {name}
                   {!selected && rows[0].discipline && (
-                    <span className="label-quiet text-[11px]">
+                    <span className="text-[12px] font-normal text-subtle [font-stretch:100%]">
                       {DISCIPLINES[rows[0].discipline] ?? rows[0].discipline}
                     </span>
                   )}
-                  <span aria-hidden className="h-px flex-1 bg-border" />
+                  {!selected && winners.get(name) && (
+                    <span className="text-[13px] font-normal text-muted-foreground [font-stretch:100%]">
+                      won by{" "}
+                      <span className="font-semibold text-foreground">
+                        <People people={winners.get(name)!} />
+                      </span>
+                    </span>
+                  )}
                 </h3>
-                <ul className="grid grid-cols-[minmax(0,1fr)] gap-2.5 lg:grid-cols-2">
-                  {rows.map((m) => (
-                    <Scoreboard key={m.id} match={m} showRound={!selected} />
-                  ))}
-                </ul>
+                {(selected
+                  ? [[name, rows] as const]
+                  : groupBy(rows, (m) => m.round ?? "Round not recorded")
+                ).map(([round, inRound]) => (
+                  <div key={round}>
+                    {!selected && (
+                      <p className="px-2 pt-2 pb-1 text-[12px] text-subtle">
+                        {round}
+                      </p>
+                    )}
+                    <ul className="border-t border-border">
+                      {inRound.map((m) => (
+                        <ResultRow key={m.id} match={m} />
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </section>
             ))
           )}
-          <div className="mt-8">
+          <div className="mt-6">
             <Pager
               path={`/tournaments/${id}`}
               params={{
@@ -150,13 +168,83 @@ async function MatchCentre({
             />
           </div>
         </section>
-      </Container>
+        <Events id={id} detail={detail} view={view} />
+      </div>
     </>
   );
 }
 
-/** The court-green header: identity, facts, provenance, and the discipline tabs on its edge. */
-function TournamentHero({
+// a group stage or pool has no final by design: saying one is missing would misdescribe it
+const GROUP = /\b(group|pool|poule|gruppe|groep|grupo)\b/i;
+
+/** An event's winner as the API reads it from the one published, decided final; never inferred. */
+function EventWinner({ event }: { event: TournamentDetail["events"][number] }) {
+  if (event.winner?.length)
+    return (
+      <p className="px-2 pt-2 text-[14px]">
+        <span className="text-muted-foreground">Winner </span>
+        <span className="font-semibold">
+          <People people={event.winner} />
+        </span>
+      </p>
+    );
+  if (GROUP.test(event.name)) return null;
+  return (
+    <p className="px-2 pt-2 text-[13px] text-subtle">
+      No decided final is published for this event, so no winner is named.
+    </p>
+  );
+}
+
+/** Identity and facts as two plain lines, then what we hold and where it came from. */
+function Header({ detail }: { detail: TournamentDetail }) {
+  const fed = FEDERATION[detail.source_id];
+  const total = detail.events.reduce((n, e) => n + e.matches, 0);
+  const flag = importFlag(detail.import_state);
+  return (
+    <header className="max-w-4xl">
+      <h1 className="display text-[32px] leading-[1.05] text-balance sm:text-[42px]">
+        {detail.name ?? "Unnamed tournament"}
+      </h1>
+      <p className="mt-2 text-[15px]">
+        <span className="num font-semibold">
+          {formatDateRange(detail.start_date, detail.end_date)}
+        </span>
+        <span className="text-muted-foreground">
+          {" · "}
+          {detail.location ?? "Location not recorded"}
+          {detail.organiser && ` · ${detail.organiser}`}
+        </span>
+      </p>
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-muted-foreground">
+        {fed && <FedCode code={fed.code} />}
+        <span>{fed?.label ?? detail.source}</span>
+        <span aria-hidden>·</span>
+        <span className="num">
+          {detail.events.length} events · {total.toLocaleString("en-AU")}{" "}
+          matches
+        </span>
+        <span aria-hidden>·</span>
+        {flag ? (
+          <span className="text-foreground" title={detail.import_state?.note}>
+            {flag}: counts cover the matches we hold
+          </span>
+        ) : (
+          <span>every published match imported</span>
+        )}
+      </p>
+      <p className="mt-1 text-[12px] text-subtle">
+        Source {detail.source} ·{" "}
+        <Link href="/coverage" className="underline">
+          About this data
+        </Link>
+      </p>
+    </header>
+  );
+}
+
+/** The discipline control: plain tabs with the code (MS…) and its full name on hover. */
+function Disciplines({
   id,
   detail,
   view,
@@ -165,175 +253,63 @@ function TournamentHero({
   detail: TournamentDetail;
   view: View;
 }) {
-  const fed = FEDERATION[detail.source_id];
-  const total = detail.events.reduce((n, e) => n + e.matches, 0);
-  const days =
-    detail.start_date && detail.end_date
-      ? Math.round(
-          (Date.parse(detail.end_date) - Date.parse(detail.start_date)) /
-            86_400_000,
-        ) + 1
-      : null;
   const counts = new Map<string, number>();
   for (const e of detail.events)
     if (e.discipline && ORDER.includes(e.discipline))
       counts.set(e.discipline, (counts.get(e.discipline) ?? 0) + e.matches);
-  const complete = detail.import_state?.status === "complete";
+  const total = detail.events.reduce((n, e) => n + e.matches, 0);
+  const tabs: [string | undefined, string, string, number][] = [
+    [undefined, "All", "All disciplines", total],
+    ...ORDER.filter((d) => counts.has(d)).map(
+      (d) =>
+        [d, d, DISCIPLINES[d], counts.get(d)!] as [
+          string,
+          string,
+          string,
+          number,
+        ],
+    ),
+  ];
   return (
-    <Hero tone="court">
-      <p className="font-display text-[13px] font-semibold tracking-[0.14em] text-lime uppercase">
-        {fed
-          ? `${fed.country ?? "International"} · ${fed.label}`
-          : "Tournament"}
-      </p>
-      <h1 className="display mt-3 max-w-4xl text-[36px] leading-[0.98] text-balance sm:text-[52px]">
-        {detail.name ?? "Unnamed tournament"}
-      </h1>
-      <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 text-[14px] text-on-court-muted sm:mt-5">
-        <HeroMeta icon={CalendarDays} label="Dates">
-          <span className="num">
-            {formatDateRange(detail.start_date, detail.end_date)}
-          </span>
-        </HeroMeta>
-        <HeroMeta icon={MapPin} label="Location">
-          {detail.location ?? "Not recorded"}
-        </HeroMeta>
-        {detail.organiser && (
-          <HeroMeta icon={Building2} label="Organiser">
-            {detail.organiser}
-          </HeroMeta>
-        )}
+    <nav aria-label="Disciplines" className="mt-5 overflow-x-auto">
+      <ul className="inline-flex min-w-max rounded-md border border-input">
+        {tabs.map(([d, code, name, n]) => {
+          const current = view.discipline === d;
+          return (
+            <li key={code} className="border-l border-input first:border-l-0">
+              <Link
+                href={href(id, { discipline: d })}
+                title={name}
+                aria-current={current ? "page" : undefined}
+                className={cn(
+                  "relative flex h-10 items-center gap-1.5 px-3.5 text-[14px] font-semibold transition-colors [font-stretch:85%] hover:no-underline",
+                  current ? "bg-form text-white" : "hover:bg-wash",
+                )}
+              >
+                <span aria-hidden>{code}</span>
+                <span className="sr-only">{name}</span>
+                <span
+                  className={cn(
+                    "num text-[12px] font-normal",
+                    current ? "text-white/80" : "text-subtle",
+                  )}
+                >
+                  <span className="sr-only">, </span>
+                  {n}
+                  <span className="sr-only"> matches</span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
-      <dl className="mt-4 flex flex-wrap items-end gap-x-7 gap-y-3 sm:mt-6 sm:gap-x-10">
-        <HeroFact term="Events" value={detail.events.length} />
-        <HeroFact term="Matches" value={total} />
-        {days !== null && days > 0 && <HeroFact term="Days" value={days} />}
-        <div className="pb-1">
-          <dt className="sr-only">Import</dt>
-          <dd
-            className={cn(
-              "rounded px-2 py-1 font-display text-[12px] font-semibold tracking-[0.1em] uppercase",
-              complete ? "bg-lime text-night" : "bg-white/12 text-on-dark",
-            )}
-            title={detail.import_state?.note}
-          >
-            {complete
-              ? "Imported in full"
-              : (importFlag(detail.import_state) ?? "Import status unknown")}
-          </dd>
-        </div>
-      </dl>
-      <p className="mt-4 text-[12px] text-on-court-muted sm:mt-5">
-        Source {detail.source} ·{" "}
-        <Link
-          href="/coverage"
-          className="underline decoration-white/30 underline-offset-[3px] hover:text-on-dark"
-        >
-          About this data
-        </Link>
-      </p>
-      <nav
-        aria-label="Disciplines"
-        className="-mx-4 mt-5 flex scroll-px-4 gap-0.5 overflow-x-auto px-4 sm:mx-0 sm:mt-7 sm:gap-1 sm:px-0"
-      >
-        <DisciplineTab
-          href={href(id, {})}
-          current={!view.discipline}
-          code="All"
-          name="All disciplines"
-          count={total}
-        />
-        {ORDER.filter((d) => counts.has(d)).map((d) => (
-          <DisciplineTab
-            key={d}
-            href={href(id, { discipline: d })}
-            current={view.discipline === d}
-            code={d}
-            name={DISCIPLINES[d]}
-            count={counts.get(d)!}
-          />
-        ))}
-      </nav>
-    </Hero>
+    </nav>
   );
 }
 
-function HeroMeta({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex min-w-0 items-center gap-2">
-      <Icon aria-hidden className="size-4 shrink-0" />
-      <span className="sr-only">{label}: </span>
-      <span className="min-w-0 truncate text-on-dark">{children}</span>
-    </li>
-  );
-}
-
-function HeroFact({ term, value }: { term: string; value: number }) {
-  return (
-    <div className="flex flex-col-reverse">
-      <dt className="mt-1 font-display text-[12px] font-semibold tracking-[0.12em] text-on-court-muted uppercase">
-        {term}
-      </dt>
-      <dd className="reveal display num text-[30px] leading-none sm:text-[40px]">
-        {value.toLocaleString("en-AU")}
-      </dd>
-    </div>
-  );
-}
-
-/** A discipline tab: the code big (MS, WD…), the full name for screen readers and on hover. The
- * current tab takes the page colour, so it reads as the open folder of the match centre. */
-function DisciplineTab({
-  href,
-  current,
-  code,
-  name,
-  count,
-}: {
-  href: string;
-  current: boolean;
-  code: string;
-  name: string;
-  count: number;
-}) {
-  return (
-    <Link
-      href={href}
-      title={name}
-      aria-current={current ? "page" : undefined}
-      className={cn(
-        "flex shrink-0 items-baseline gap-1.5 rounded-t-[10px] px-3 pt-3 pb-3.5 transition-colors duration-150 sm:px-4",
-        current
-          ? "bg-background text-foreground"
-          : "text-on-court-muted hover:bg-white/8 hover:text-on-dark",
-      )}
-    >
-      <span
-        aria-hidden
-        className="font-display text-[19px] font-bold tracking-[0.05em] uppercase"
-      >
-        {code}
-      </span>
-      <span className="sr-only">{name}</span>
-      {/* the count is spoken everywhere but shown from 640 px, so six tabs fit a phone */}
-      <span className="sr-only">, {count} matches</span>
-      <span aria-hidden className="num hidden text-[12px] sm:inline">
-        {count.toLocaleString("en-AU")}
-      </span>
-    </Link>
-  );
-}
-
-/** The events of the open discipline as chips; past CHIP_LIMIT, a menu that works without JS. */
-function EventChips({
+/** The events of the open discipline: a side list on desktop, a scrolling row on a phone, the
+ * same links either way. Past LIST_LIMIT a menu that works without JavaScript. */
+function Events({
   id,
   detail,
   view,
@@ -346,44 +322,55 @@ function EventChips({
     (e) => !view.discipline || e.discipline === view.discipline,
   );
   if (events.length <= 1 && !view.event) return null;
-  if (events.length > CHIP_LIMIT) {
+  const heading = (
+    <p className="sheet-head mb-1">
+      Events
+      <span className="num text-[13px] font-normal text-muted-foreground [font-stretch:100%]">
+        {events.length}
+      </span>
+    </p>
+  );
+  if (events.length > LIST_LIMIT) {
     return (
-      <form
-        action={`/tournaments/${id}`}
-        method="get"
-        className="mb-8 flex flex-wrap items-end gap-2"
-      >
-        {view.discipline && (
-          <input type="hidden" name="discipline" value={view.discipline} />
-        )}
-        <label className="min-w-0 flex-1 sm:max-w-md">
-          <span className="label-quiet mb-1.5 block">
-            Event ({events.length})
-          </span>
-          <Select
-            name="event"
-            defaultValue={view.event ?? ""}
-            className="w-full"
-          >
-            <option value="">All {events.length} events</option>
-            {events.map((e) => (
-              <option key={e.name} value={e.name}>
-                {e.name} ({e.matches})
-              </option>
-            ))}
-          </Select>
-        </label>
-        <button type="submit" className={BUTTON_QUIET}>
-          Show
-        </button>
-      </form>
+      <aside className="min-w-0 lg:order-2">
+        <form
+          action={`/tournaments/${id}`}
+          method="get"
+          className="space-y-2 lg:sticky lg:top-20"
+        >
+          {heading}
+          {view.discipline && (
+            <input type="hidden" name="discipline" value={view.discipline} />
+          )}
+          <label className="block">
+            <span className="sr-only">Event</span>
+            <Select
+              name="event"
+              defaultValue={view.event ?? ""}
+              className="w-full"
+            >
+              <option value="">All {events.length} events</option>
+              {events.map((e) => (
+                <option key={e.name} value={e.name}>
+                  {e.name} ({e.matches})
+                </option>
+              ))}
+            </Select>
+          </label>
+          <button type="submit" className={`${BUTTON_QUIET} w-full`}>
+            Show event
+          </button>
+        </form>
+      </aside>
     );
   }
+  const all = events.reduce((n, e) => n + e.matches, 0);
   return (
-    <nav aria-label="Events" className="mb-8">
-      <ul className="-mx-4 flex scroll-px-4 gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-        <li className="shrink-0">
-          <Chip
+    <aside className="order-first min-w-0 lg:order-2">
+      <nav aria-label="Events" className="lg:sticky lg:top-20">
+        <div className="hidden lg:block">{heading}</div>
+        <ul className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:mx-0 lg:block lg:px-0">
+          <EventLink
             href={href(id, { discipline: view.discipline })}
             current={!view.event}
             label={
@@ -391,77 +378,69 @@ function EventChips({
                 ? `All ${DISCIPLINES[view.discipline]?.toLowerCase()}`
                 : "All events"
             }
-            count={events.reduce((n, e) => n + e.matches, 0)}
+            count={all}
           />
-        </li>
-        {events.map((e) => (
-          <li key={e.name} className="shrink-0">
-            <Chip
+          {events.map((e) => (
+            <EventLink
+              key={e.name}
               href={href(id, { discipline: view.discipline, event: e.name })}
               current={view.event === e.name}
               label={e.name}
               count={e.matches}
+              winner={e.winner?.map((p) => p.name).join(" / ")}
             />
-          </li>
-        ))}
-      </ul>
-    </nav>
+          ))}
+        </ul>
+      </nav>
+    </aside>
   );
 }
 
-function Chip({
+function EventLink({
   href,
   current,
   label,
   count,
+  winner,
 }: {
   href: string;
   current: boolean;
   label: string;
   count: number;
+  winner?: string;
 }) {
   return (
-    <Link
-      href={href}
-      aria-current={current ? "page" : undefined}
-      className={cn(
-        "relative inline-flex h-11 items-center gap-2 rounded-full px-3.5 text-[13px] whitespace-nowrap ring-1 transition-colors duration-150",
-        current
-          ? "bg-night font-medium text-on-dark ring-night"
-          : "bg-card text-foreground ring-border hover:ring-foreground/30",
-      )}
-    >
-      {label}
-      <span
-        className={cn("num text-[12px]", current ? "text-lime" : "text-subtle")}
+    <li className="shrink-0 lg:border-b lg:border-border">
+      <Link
+        href={href}
+        aria-current={current ? "page" : undefined}
+        className={cn(
+          "relative flex h-10 items-center justify-between gap-3 rounded-md px-3 text-[14px] whitespace-nowrap ring-1 ring-border hover:no-underline lg:h-auto lg:min-h-9 lg:rounded-none lg:px-1 lg:py-1.5 lg:ring-0",
+          current
+            ? "bg-form font-semibold text-white lg:bg-transparent lg:text-form"
+            : "hover:bg-wash",
+        )}
       >
-        <span className="sr-only">, </span>
-        {count}
-        <span className="sr-only"> matches</span>
-      </span>
-    </Link>
-  );
-}
-
-function ImportNote({ detail }: { detail: TournamentDetail }) {
-  const flag = importFlag(detail.import_state);
-  if (!flag) return null;
-  return (
-    <p
-      role="note"
-      className="mb-8 flex max-w-3xl items-start gap-2.5 rounded-lg bg-muted px-4 py-3 text-[14px] text-muted-foreground"
-    >
-      <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-foreground" />
-      <span>
-        <span className="font-medium text-foreground">{flag}.</span>{" "}
-        {detail.import_state?.note}
-        {detail.import_state?.status !== "complete_with_gaps" &&
-        detail.import_state?.unimported_matches
-          ? ` ${detail.import_state.unimported_matches} more could not be imported.`
-          : ""}{" "}
-        Counts on this page cover the matches we hold.
-      </span>
-    </p>
+        <span className="min-w-0">
+          <span className="block truncate">{label}</span>
+          {winner && (
+            <span className="hidden truncate text-[12px] font-normal text-muted-foreground lg:block">
+              won by {winner}
+            </span>
+          )}
+        </span>
+        <span
+          className={cn(
+            "num text-[12px]",
+            current ? "text-white/80 lg:text-form" : "text-subtle",
+          )}
+        >
+          <span className="sr-only">, </span>
+          {count}
+          <span className="sr-only"> matches</span>
+        </span>
+      </Link>
+    </li>
   );
 }
 
@@ -475,20 +454,14 @@ function groupBy<T>(items: T[], key: (item: T) => string): [string, T[]][] {
   return [...groups];
 }
 
-function MatchCentreSkeleton() {
+function PageSkeleton() {
   return (
-    <>
-      <Hero tone="court">
-        <div className="space-y-4 pb-16" role="status" aria-busy="true">
-          <span className="sr-only">Loading tournament…</span>
-          <Skeleton className="h-3 w-40 bg-white/10" />
-          <Skeleton className="h-12 w-[36rem] max-w-full bg-white/10" />
-          <Skeleton className="h-4 w-80 max-w-full bg-white/10" />
-        </div>
-      </Hero>
-      <Container>
-        <RowsSkeleton rows={8} />
-      </Container>
-    </>
+    <div className="space-y-4" role="status" aria-busy="true">
+      <span className="sr-only">Loading tournament…</span>
+      <Skeleton className="h-10 w-[36rem] max-w-full bg-muted" />
+      <Skeleton className="h-4 w-80 max-w-full bg-muted" />
+      <Skeleton className="h-10 w-72 bg-muted" />
+      <RowsSkeleton rows={8} />
+    </div>
   );
 }

@@ -4,18 +4,13 @@ import type { ComponentProps, ReactNode } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  type Outcome,
-  formatDate,
-  formatScore,
-  resultLabel,
-} from "@/lib/format";
+import { type Outcome, formatScore, resultLabel } from "@/lib/format";
 
-// solid result blocks, like a form guide: white on each tone is at least 5:1
+// a won result is filled form green, a lost one outlined in red: shape and letter, not colour alone
 const TONE = {
   win: "bg-win text-white",
-  loss: "bg-loss text-white",
-  neutral: "bg-muted text-neutral-status ring-1 ring-neutral-status/30",
+  loss: "text-loss ring-1 ring-loss ring-inset",
+  neutral: "text-neutral-status ring-1 ring-border ring-inset",
 };
 
 export function ResultBadge({
@@ -30,7 +25,7 @@ export function ResultBadge({
     <span
       title={label.title}
       className={cn(
-        "num inline-flex h-7 min-w-9 items-center justify-center rounded-md px-2 font-display text-[13px] font-bold tracking-[0.04em] uppercase",
+        "num inline-flex h-6 min-w-6 items-center justify-center rounded-[3px] px-1.5 text-[12px] font-bold whitespace-nowrap",
         TONE[label.tone],
       )}
     >
@@ -47,11 +42,7 @@ export function Score({
 }) {
   if (games.length === 0)
     return <span className="text-muted-foreground">–</span>;
-  return (
-    <span className="num font-display text-[18px] font-semibold whitespace-nowrap">
-      {formatScore(games)}
-    </span>
-  );
+  return <span className="num whitespace-nowrap">{formatScore(games)}</span>;
 }
 
 /** Decided results oldest → newest, as W/L squares. Undecided matches are left out. */
@@ -69,8 +60,10 @@ export function FormStrip({ results }: { results: ("won" | "lost")[] }) {
             key={i}
             title={r === "won" ? "Won" : "Lost"}
             className={cn(
-              "num flex size-7 items-center justify-center rounded-md font-display text-[13px] font-bold",
-              r === "won" ? "bg-win text-white" : "bg-loss text-white",
+              "num flex size-[22px] items-center justify-center rounded-[3px] text-[12px] font-bold",
+              r === "won"
+                ? "bg-win text-white"
+                : "text-loss ring-1 ring-loss ring-inset",
             )}
           >
             {r === "won" ? "W" : "L"}
@@ -148,40 +141,34 @@ export function Select({ className, ...props }: ComponentProps<"select">) {
 
 /** The quiet secondary button: filters, pagination. */
 export const BUTTON_QUIET =
-  "inline-flex h-10 items-center justify-center rounded-lg bg-card px-4 text-sm font-medium text-foreground ring-1 ring-input transition-colors hover:bg-muted";
+  "inline-flex h-11 items-center justify-center rounded-md bg-card px-4 text-sm font-medium text-foreground ring-1 ring-input transition-colors hover:bg-muted lg:h-9";
 
-/** A page section: a condensed uppercase heading over a heavy rule, like a broadcast lower third. */
+/** A page section: a green condensed heading over a green hairline, like a printed form. */
 export function Section({
+  id,
   title,
   action,
   children,
   className,
 }: {
+  id?: string;
   title: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <section className={cn("min-w-0", className)}>
-      <div className="flex items-baseline justify-between gap-4 border-b-2 border-foreground pb-2">
-        <h2 className="display text-[22px] tracking-[0.02em] uppercase">
-          {title}
-        </h2>
-        {action && <div className="text-[13px]">{action}</div>}
+    <section id={id} className={cn("min-w-0 scroll-mt-20", className)}>
+      <div className="sheet-head">
+        <h2>{title}</h2>
+        {action && (
+          <div className="text-[13px] font-normal text-muted-foreground [font-stretch:100%]">
+            {action}
+          </div>
+        )}
       </div>
       {children}
     </section>
-  );
-}
-
-/** A big condensed figure with its label: real counts only. */
-export function Stat({ value, label }: { value: ReactNode; label: string }) {
-  return (
-    <div>
-      <p className="reveal display num text-[40px] leading-none">{value}</p>
-      <p className="label-quiet mt-1.5">{label}</p>
-    </div>
   );
 }
 
@@ -211,7 +198,7 @@ export function Pager({
     const s = q.toString();
     return s ? `${path}?${s}` : path;
   };
-  const link = cn(BUTTON_QUIET, "h-8 px-3 text-[13px]");
+  const link = cn(BUTTON_QUIET, "h-11 px-3 text-[13px] lg:h-8");
   return (
     <nav
       aria-label="Pages"
@@ -236,79 +223,26 @@ export function Pager({
   );
 }
 
-/** A calendar-style date: big day, small month and year. Screen readers get the full date. */
-export function DateBlock({ iso }: { iso: string | null | undefined }) {
-  if (!iso)
-    return <span className="text-[13px] text-subtle">Date not recorded</span>;
-  const d = new Date(`${iso}T00:00:00Z`);
-  return (
-    <span className="flex flex-col leading-none">
-      <span aria-hidden className="display num text-[30px]">
-        {d.getUTCDate()}
-      </span>
-      <span aria-hidden className="label-quiet mt-1 text-[11px]">
-        {d.toLocaleDateString("en-AU", {
-          month: "short",
-          year: "numeric",
-          timeZone: "UTC",
-        })}
-      </span>
-      <span className="sr-only">{formatDate(iso)}</span>
-    </span>
-  );
-}
-
-/** A federation's country code in a small badge, the sports-results way of marking a nation. */
+/** A federation's country code, as results lists print it. */
 export function FedCode({
   code,
   label,
-  dark = false,
+  onDark = false,
 }: {
   code: string;
-  /** Spoken in place of the code where no country name is shown next to it. */
   label?: string;
-  dark?: boolean;
+  onDark?: boolean;
 }) {
   return (
     <span
-      aria-hidden={!label}
       title={label}
       className={cn(
-        "inline-flex h-5 min-w-9 shrink-0 items-center justify-center rounded-[4px] px-1 font-display text-[11px] font-bold tracking-[0.08em]",
-        dark ? "bg-white/12 text-on-dark" : "bg-night text-on-dark",
+        "shrink-0 text-[12px] font-semibold tracking-[0.04em]",
+        onDark ? "text-white/85" : "text-muted-foreground",
       )}
     >
-      <span aria-hidden>{code}</span>
+      <span aria-hidden={!!label}>{code}</span>
       {label && <span className="sr-only">{label}</span>}
-    </span>
-  );
-}
-
-/** A person's initials in a crest: the identity mark used instead of a photo we do not hold. */
-export function Monogram({
-  name,
-  className,
-}: {
-  name: string;
-  className?: string;
-}) {
-  const initials = name
-    .split(/[\s/-]+/)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl bg-night font-display font-bold text-on-dark",
-        className,
-      )}
-    >
-      <span className="absolute inset-x-0 bottom-0 h-1 bg-lime" />
-      {initials}
     </span>
   );
 }
