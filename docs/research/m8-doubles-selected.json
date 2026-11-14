@@ -21,6 +21,6 @@
    "beta": 8.333333333333334,
    "tau": 0.5
   },
-  "validation_log_loss": 0.5144895002686941
+  "validation_log_loss": 0.5148380598755795
  }
 }

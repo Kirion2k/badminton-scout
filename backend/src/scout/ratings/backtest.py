@@ -208,7 +208,7 @@ GRIDS: dict[str, list[dict[str, Any]]] = {
     "winrate": [{"prior": a} for a in (0.25, 0.5, 1.0, 2.0, 5.0, 10.0)],
     "elo": [
         {"k": k, "provisional_k": pk, "provisional_n": pn, "decay_per_year": d}
-        for k in (16.0, 24.0, 32.0, 40.0, 48.0, 64.0, 80.0)
+        for k in (16.0, 24.0, 32.0, 40.0, 48.0, 64.0, 80.0, 96.0, 128.0)
         for pk, pn in [(None, 0), *((k * x, n) for x, n in _PROVISIONAL)]
         for d in (0.0, 0.1, 0.25)
     ],
