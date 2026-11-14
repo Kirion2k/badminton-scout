@@ -11,7 +11,7 @@ test("discover → search → profile → match → tournament → another playe
   ).toBeVisible();
 
   // a typo: "Tester" spelled "Testr"
-  const search = page.getByRole("searchbox", {
+  const search = page.getByRole("combobox", {
     name: "Search players by name",
   });
   await search.fill("Alex Testr");
@@ -225,4 +225,33 @@ test("pick any player to compare with by name", async ({ page }) => {
     .click();
   await expect(page).toHaveURL(/\/players\/\d+\/vs\/\d+$/);
   await expect(page.getByText(/meeting/).first()).toBeVisible();
+});
+
+test("suggestions as you type: pick one with the keyboard", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const search = page.getByRole("combobox", {
+    name: "Search players by name",
+  });
+  // focused once the streamed form has replaced the first-paint one and React is running;
+  // typing earlier goes into the placeholder form and is lost (shortcut: see the home page)
+  await expect(search).toBeFocused();
+  await search.pressSequentially("alex tes", { delay: 30 });
+  const option = page.getByRole("option", { name: /Alex TESTER/ });
+  await expect(option).toBeVisible();
+  await expect(search).toHaveAttribute("aria-expanded", "true");
+  await search.press("ArrowDown");
+  await expect(option).toHaveAttribute("aria-selected", "true");
+  await search.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/players/${ids().alex}$`));
+
+  // Escape closes the list and Enter then searches as before
+  await search.fill("");
+  await search.pressSequentially("alex tes", { delay: 30 });
+  await expect(option).toBeVisible();
+  await search.press("Escape");
+  await expect(option).toBeHidden();
+  await search.press("Enter");
+  await expect(page).toHaveURL(/\/\?q=alex\+tes/);
 });

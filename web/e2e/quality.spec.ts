@@ -57,7 +57,7 @@ test("keyboard: skip link, slash to search, enter to submit", async ({
   ).toBeFocused();
   await page.locator("body").click({ position: { x: 5, y: 300 } });
   await page.keyboard.press("/");
-  const search = page.getByRole("searchbox", {
+  const search = page.getByRole("combobox", {
     name: "Search players by name",
   });
   await expect(search).toBeFocused();

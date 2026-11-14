@@ -1,6 +1,9 @@
 import { Search } from "lucide-react";
 
-/** Player search. A plain GET form: works before JavaScript loads, and the URL is the state. */
+import { SuggestInput } from "@/components/suggest-input";
+
+/** Player search. A plain GET form: works before JavaScript loads, and the URL is the state.
+ * With JavaScript, names are suggested as you type. */
 export function SearchForm({
   defaultValue,
   autoFocus = false,
@@ -26,7 +29,7 @@ export function SearchForm({
           aria-hidden
           className={`pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-subtle ${compact ? "size-4" : "size-5"}`}
         />
-        <input
+        <SuggestInput
           id={id}
           name="q"
           data-player-search

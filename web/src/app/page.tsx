@@ -25,6 +25,8 @@ export default function DiscoverPage({ searchParams }: PageProps<"/">) {
         </h1>
         <div className="mt-5">
           <h2 className="sr-only">Find a player</h2>
+          {/* shortcut: text typed before the streamed form replaces this first-paint one is lost
+              (a few hundred ms on a slow phone); keep the form outside Suspense if it is reported */}
           <Suspense fallback={<SearchForm />}>
             <SearchBox searchParams={searchParams} />
           </Suspense>
