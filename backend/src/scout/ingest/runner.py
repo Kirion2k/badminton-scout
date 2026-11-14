@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from scout.budget import Budget, BudgetExhausted
+from scout.ingest.event_codes import reclassify
 from scout.ingest.operations import TsMatchDay, TsMatchRow, TsTournament
 from scout.ingest.provider import ApiAnythingProvider, OperationFailed, ProviderError
 from scout.ingest.tournamentsoftware import ingest_rows
@@ -278,13 +279,25 @@ def import_tournament(
         session.rollback()
         row.status, row.note, run.status = "failed", "unexpected error, see logs", "failed"
         run.finished_at = datetime.now(UTC)
+        _reclassify_tournament(session, portal.source_id, row.guid)  # days already committed
         session.commit()
         raise
+    _reclassify_tournament(session, portal.source_id, row.guid)
     counts["requests"] += provider.requests_made(portal.source_id) - start_requests
     run.finished_at = datetime.now(UTC)
     run.counts = {"tournament": row.guid, **counts}
     session.commit()
     return counts
+
+
+def _reclassify_tournament(session: Session, source_id: str, guid: str) -> None:
+    """Disciplines are read in the tournament's own language, once its events are known: the
+    per-row reading at import is English-only (docs/event-codes.md)."""
+    tournament_id = session.scalar(
+        select(Tournament.id).filter_by(source_id=source_id, source_key=guid)
+    )
+    if tournament_id is not None:
+        reclassify(session, [tournament_id])
 
 
 def _sync_tournament(session: Session, source_id: str, row: TournamentDiscovery) -> None:

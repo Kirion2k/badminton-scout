@@ -1,0 +1,40 @@
+{
+ "snapshot": 3,
+ "family": "fed",
+ "constant": {
+  "config": {},
+  "by_round": true
+ },
+ "elo_default": {
+  "config": {
+   "k": 32.0
+  },
+  "by_round": true
+ },
+ "winrate": {
+  "config": {
+   "prior": 1.0
+  },
+  "by_round": true,
+  "validation_log_loss": 0.592660082289296
+ },
+ "elo_tuned": {
+  "config": {
+   "k": 96.0,
+   "provisional_k": 192.0,
+   "provisional_n": 10,
+   "decay_per_year": 0.0
+  },
+  "by_round": true,
+  "validation_log_loss": 0.5562740928950177
+ },
+ "glicko2": {
+  "config": {
+   "tau": 0.3,
+   "period_days": 1,
+   "initial_rd": 350.0
+  },
+  "by_round": true,
+  "validation_log_loss": 0.5644134499846962
+ }
+}

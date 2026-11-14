@@ -1,0 +1,26 @@
+{
+ "_note": "BWF doubles, validation only, before the test split was read (ADR-0012 splits, day batching).",
+ "constant": {
+  "config": {},
+  "validation_log_loss": 0.6931471805599453
+ },
+ "pair_elo": {
+  "config": {
+   "k": 64.0
+  },
+  "validation_log_loss": 0.5551432261258131
+ },
+ "team_elo": {
+  "config": {
+   "k": 64.0
+  },
+  "validation_log_loss": 0.5206489475993278
+ },
+ "trueskill": {
+  "config": {
+   "beta": 8.333333333333334,
+   "tau": 0.5
+  },
+  "validation_log_loss": 0.5148380598755795
+ }
+}

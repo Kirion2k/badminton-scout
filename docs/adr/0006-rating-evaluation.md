@@ -1,6 +1,6 @@
 # ADR-0006: Singles Elo, and how its predictive value is evaluated
 
-Status: Accepted 2026-11-12 · Implemented in M5, not M0
+Status: Accepted 2026-11-12 · Implemented in M8. Amended by ADR-0012 (pools, ordering, splits, baselines)
 
 ## Decision
 Elo, computed separately per singles discipline (MS, WS), is the first performance model. Beating a constant 0.5 forecast is necessary but not sufficient evidence that it works.

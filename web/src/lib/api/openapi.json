@@ -44,6 +44,18 @@
             "title": "Awaiting Import",
             "type": "integer"
           },
+          "counts_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counts As Of"
+          },
           "excluded": {
             "items": {
               "type": "string"
@@ -113,6 +125,7 @@
           "public_tournaments",
           "public_matches",
           "public_players",
+          "counts_as_of",
           "last_retrieved_at",
           "last_sync_at",
           "next_sync_at",
