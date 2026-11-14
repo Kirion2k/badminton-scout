@@ -321,3 +321,38 @@ def test_doubles_models_learn_and_never_see_their_own_result() -> None:
         flipped = [replace(s, a_won=not s.a_won) if s is target else s for s in stream]
         after = {p.match_id: p.p for p in replay_doubles(model(), flipped)}
         assert all(base[s.match_id] == after[s.match_id] for s in stream if s.day <= target.day)
+
+
+def test_review_unlabelled_match_never_sees_same_day_results() -> None:
+    """An unlabelled match may have been the day's first: predicted from the start of the day,
+    whatever the labelled matches of that day did (review finding, ADR-0012)."""
+    day2 = DAY + timedelta(days=1)
+    history = [m(1, 1, 2), m(2, 1, 3), m(3, 2, 3)]
+    seen = set[float | None]()
+    for semi_won in (True, False):
+        today = [m(10, 1, 2, day=day2, rnd=None), m(11, 1, 3, a_won=semi_won, day=day2, rnd="SF")]
+        seen.add({x.match_id: x.p for x in replay(Elo(), history + today)}[10])
+    assert len(seen) == 1  # the semi-final's result does not leak into it
+
+
+def test_review_batching_does_not_change_which_matches_are_scored() -> None:
+    stream = scored_stream(6)
+    by_round = [(p.match_id, p.abstain) for p in replay(Elo(), stream, by_round=True)]
+    by_day = [(p.match_id, p.abstain) for p in replay(Elo(), stream, by_round=False)]
+    assert sorted(by_round) == sorted(by_day)
+
+
+def test_review_an_idle_player_is_never_less_known_than_a_new_one() -> None:
+    g = Glicko2(Glicko2Config(period_days=7, initial_rd=250.0))
+    g.observe(DAY, [Result(1, 2, True)])
+    g.at(DAY + timedelta(days=7 * 10_000))
+    assert g.player(1).rd <= 250.0 + 1e-9
+
+
+def test_review_trueskill_compounds_variance_within_a_batch() -> None:
+    from scout.analytics.doubles import TrueSkill
+
+    once, twice = TrueSkill(), TrueSkill()
+    once.observe([((1, 2), (3, 4), True)])
+    twice.observe([((1, 2), (3, 4), True), ((1, 5), (6, 7), True)])
+    assert twice.var[1] < once.var[1]

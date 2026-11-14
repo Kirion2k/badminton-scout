@@ -14,7 +14,7 @@ from datetime import date
 
 from scout.analytics.graph import UnionFind
 from scout.analytics.models import elo_expected
-from scout.analytics.ordering import batch_key, batches
+from scout.analytics.replay import day_plan
 
 Team = tuple[int, int]  # player ids, sorted
 
@@ -131,7 +131,8 @@ class TrueSkill:
             w = v * (v + t)
             for p, sign in [(p, 1.0) for p in win] + [(p, -1.0) for p in lose]:
                 new_mu[p] = new_mu.get(p, pre[p][0]) + sign * var[p] / c * v
-                new_var[p] = var[p] * max(1 - var[p] / c2 * w, 1e-6)
+                # every match of the batch shrinks the variance: compound, never overwrite
+                new_var[p] = new_var.get(p, var[p]) * max(1 - var[p] / c2 * w, 1e-6)
         self.mu.update(new_mu)
         self.var.update(new_var)
 
@@ -142,37 +143,46 @@ def replay_doubles(
     *,
     by_round: bool = True,
 ) -> list[DoublesPrediction]:
-    """As `replay.replay`: predictions from the state before each batch; abstain when a player
-    has no prior match or the two sides are not connected through earlier matches."""
+    """As `replay.replay`: abstentions from the start of the day, unlabelled matches predicted
+    from the start of the day, labelled rounds predicted from the state before each round."""
     played: dict[int, int] = {}
     pairs: dict[Team, int] = {}
     graph = UnionFind()
     out: list[DoublesPrediction] = []
-
-    def key(m: DoublesScored) -> tuple[date, float]:
-        return batch_key(m.day, m.rank, by_round=by_round)
-
-    for batch in batches(matches, key):
-        for m in batch:
-            na = min(played.get(p, 0) for p in m.a)
-            nb = min(played.get(p, 0) for p in m.b)
-            reason = None
-            if na == 0 or nb == 0:
-                reason = "insufficient_data"
+    for day, early, rounds in day_plan(
+        matches, lambda m: m.day, lambda m: m.rank, by_round=by_round
+    ):
+        todays = early + [m for r in rounds for m in r]
+        reason: dict[int, str | None] = {}
+        for m in todays:
+            if min(played.get(p, 0) for p in (*m.a, *m.b)) == 0:
+                reason[m.match_id] = "insufficient_data"
             elif not graph.connected(m.a[0], m.b[0]):
-                reason = "incompatible_pools"
-            p = None if reason else model.predict(m.a, m.b)
-            pair = min(pairs.get(m.a, 0), pairs.get(m.b, 0))
-            out.append(
-                DoublesPrediction(
-                    m.match_id, m.day, m.cluster, p, int(m.a_won), na, nb, pair, reason
-                )
-            )
-        model.observe([(m.a, m.b, m.a_won) for m in batch])
-        for m in batch:
-            for p in (*m.a, *m.b):
-                played[p] = played.get(p, 0) + 1
-                graph.union(m.a[0], p)
+                reason[m.match_id] = "incompatible_pools"
+            else:
+                reason[m.match_id] = None
+
+        # unlabelled matches are predicted first and applied last; each round in between
+        steps = [("predict", early)]
+        steps += [(action, r) for r in rounds for action in ("predict", "apply")]
+        steps.append(("apply", early))
+        for action, batch in steps:
+            if action == "predict":
+                for m in batch:
+                    why = reason[m.match_id]
+                    p = None if why else model.predict(m.a, m.b)
+                    na = min(played.get(q, 0) for q in m.a)
+                    nb = min(played.get(q, 0) for q in m.b)
+                    pair = min(pairs.get(m.a, 0), pairs.get(m.b, 0))
+                    out.append(DoublesPrediction(
+                        m.match_id, day, m.cluster, p, int(m.a_won), na, nb, pair, why
+                    ))  # fmt: skip
+            elif batch:
+                model.observe([(m.a, m.b, m.a_won) for m in batch])
+        for m in todays:
+            for q in (*m.a, *m.b):
+                played[q] = played.get(q, 0) + 1
+                graph.union(m.a[0], q)
             graph.union(m.a[0], m.b[0])
             for t in (m.a, m.b):
                 pairs[t] = pairs.get(t, 0) + 1

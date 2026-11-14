@@ -121,7 +121,8 @@ def test_evaluate_reports_groups_and_intervals() -> None:
 
 
 @pytest.mark.parametrize("change", ["correction", "insertion", "identity_merge", "removal"])
-def test_incremental_rebuild_equals_full_rebuild(change: str) -> None:
+def test_a_change_touches_only_predictions_from_its_day_on(change: str) -> None:
+    """What a rebuild relies on: before `affected_from`, predictions are identical."""
     old = rows()
     new = list(old)
     if change == "correction":  # a historical result fixed
@@ -133,20 +134,12 @@ def test_incremental_rebuild_equals_full_rebuild(change: str) -> None:
         new = [r for r in new if r.a != r.b]
     else:
         del new[250]
-    base = bt.run("elo", {"k": 24.0}, old)
-    inc, since = bt.incremental("elo", {"k": 24.0}, base, old, new)
-    full = bt.run("elo", {"k": 24.0}, new)
+    since = bt.affected_from(old, new)
     assert since is not None
-    key = {p.match_id: p for p in full}
-    assert sorted(p.match_id for p in inc) == sorted(key)
-    assert all(p == key[p.match_id] for p in inc)
-
-
-def test_nothing_changed_reuses_everything() -> None:
-    data = rows()
-    base = bt.run("elo", {}, data)
-    inc, since = bt.incremental("elo", {}, base, data, list(data))
-    assert since is None and inc == base
+    before = {p.match_id: p for p in bt.run("elo", {"k": 24.0}, old) if p.day < since}
+    after = {p.match_id: p for p in bt.run("elo", {"k": 24.0}, new) if p.day < since}
+    assert before == after
+    assert bt.affected_from(old, list(old)) is None
 
 
 def test_connectivity_finds_separate_federations() -> None:
@@ -161,3 +154,20 @@ def test_connectivity_finds_separate_federations() -> None:
 
 def test_names_compare_loosely_without_printing_them() -> None:
     assert name_key("Ondřej KRÁL") == name_key("ondrej kral") == name_key("KRAL, Ondrej")
+
+
+def test_review_rating_history_is_kept_per_pool() -> None:
+    from scout.ratings.store import History
+
+    data = rows()
+    junior = [replace(r, pool="fed:MS:junior", match_id=r.match_id + 10_000) for r in data]
+    history = History()
+    bt.run("elo", {}, data + junior, after_batch=history)
+    pools = {pool for pool, _, _ in history.points}
+    assert pools == {"fed:MS", "fed:MS:junior"}
+    # the same player has two independent series, each counting only its own pool's matches
+    p = data[0].a
+    adult = max(
+        n for (pool, q, _), (*_, n) in history.points.items() if pool == "fed:MS" and q == p
+    )
+    assert adult == sum(1 for r in data if p in (r.a, r.b))

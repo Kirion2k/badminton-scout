@@ -486,6 +486,7 @@ class RatingPoint(Base):
     run_id: Mapped[int] = mapped_column(
         ForeignKey("rating_run.id", ondelete="CASCADE"), primary_key=True
     )
+    pool: Mapped[str] = mapped_column(Text, primary_key=True)
     player_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     day: Mapped[date] = mapped_column(primary_key=True)
     rating: Mapped[float]

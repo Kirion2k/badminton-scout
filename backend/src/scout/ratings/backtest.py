@@ -73,7 +73,7 @@ def run(
     rows: Sequence[Row],
     *,
     by_round: bool = True,
-    after_batch: Callable[[Model, date, list[Scored]], None] | None = None,
+    after_batch: Callable[[str, Model, date, list[Scored]], None] | None = None,
 ) -> list[Prediction]:
     """Replay each pool separately (pools never share ratings) and return every prediction."""
     by_pool: defaultdict[str, list[Row]] = defaultdict(list)
@@ -84,7 +84,7 @@ def run(
         model = make_model(name, config)
         hook: Callable[[date, list[Scored]], None] | None = None
         if after_batch:
-            hook = functools.partial(after_batch, model)
+            hook = functools.partial(after_batch, pool, model)
         out.extend(replay(model, scored(by_pool[pool]), by_round=by_round, after_batch=hook))
     return out
 
@@ -241,31 +241,14 @@ def tune(name: str, rows: Sequence[Row], splits: Splits) -> list[Trial]:
 
 def affected_from(old: Sequence[Row], new: Sequence[Row]) -> date | None:
     """The earliest day whose eligible matches differ between two snapshots: an added, removed
-    or corrected match, or a changed player id (a merge or split). None when nothing changed."""
+    or corrected match, or a changed player id (a merge or split). None when nothing changed.
+
+    Ratings are path-dependent, so every prediction from that day on must be recomputed. A full
+    rebuild (`run` on the new snapshot) does exactly that and takes seconds at this size, so it
+    is the only rebuild: an incremental one would need stored replay checkpoints, which are not
+    worth their complexity yet. This tells a caller which stored predictions a change touched."""
     before = {r.match_id: r for r in old}
     after = {r.match_id: r for r in new}
     days = [r.day for k, r in before.items() if after.get(k) != r]
     days += [r.day for k, r in after.items() if before.get(k) != r]
     return min(days, default=None)
-
-
-def incremental(
-    name: str,
-    config: dict[str, Any],
-    base: Sequence[Prediction],
-    old: Sequence[Row],
-    new: Sequence[Row],
-    *,
-    by_round: bool = True,
-) -> tuple[list[Prediction], date | None]:
-    """Predictions for `new`, keeping `base` (made on `old`) before the earliest affected day.
-    Ratings are path-dependent, so everything from that day on is recomputed. The state at that
-    day is re-derived by replaying the unchanged earlier matches: at this scale (a full BWF replay
-    takes seconds) a stored checkpoint is not worth its complexity. Tests check the result is
-    identical to a full rebuild."""
-    since = affected_from(old, new)
-    if since is None:
-        return list(base), None
-    fresh = [p for p in run(name, config, new, by_round=by_round) if p.day >= since]
-    kept = [p for p in base if p.day < since]
-    return sorted(kept + fresh, key=lambda p: (p.day, p.match_id)), since

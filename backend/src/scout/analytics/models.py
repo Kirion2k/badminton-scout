@@ -223,7 +223,8 @@ class Glicko2:
         idle = (self.period or 0) - self.as_of.get(p, self.period or 0)
         if idle > 0:  # step 6 once per idle period, capped at the starting deviation
             phi2 = (s.rd / _SCALE) ** 2 + idle * s.vol**2
-            s = Glicko2Player(s.rating, min(math.sqrt(phi2) * _SCALE, c.max_rd), s.vol)
+            cap = min(c.initial_rd, c.max_rd)  # a returning player is never less known than new
+            s = Glicko2Player(s.rating, min(math.sqrt(phi2) * _SCALE, cap), s.vol)
         return s
 
     def predict(self, a: int, b: int) -> float:

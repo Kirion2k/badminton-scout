@@ -33,13 +33,14 @@ class History:
     """Each player's rating after their last batch of a day (retrospective, never scored)."""
 
     def __init__(self) -> None:
-        self.points: dict[tuple[int, date], tuple[float, float | None, float | None, int]] = {}
-        self.played: dict[int, int] = {}
+        # (pool, player, day): pools never share ratings, so neither do their histories
+        self.points: dict[tuple[str, int, date], tuple[float, float | None, float | None, int]] = {}
+        self.played: dict[tuple[str, int], int] = {}
 
-    def __call__(self, model: Model, day: date, batch: list[Scored]) -> None:
+    def __call__(self, pool: str, model: Model, day: date, batch: list[Scored]) -> None:
         for m in batch:
             for p in (m.a, m.b):
-                self.played[p] = self.played.get(p, 0) + 1
+                self.played[(pool, p)] = self.played.get((pool, p), 0) + 1
         for p in {q for m in batch for q in (m.a, m.b)}:
             if isinstance(model, Elo):
                 value: tuple[float, float | None, float | None] = (model.current(p), None, None)
@@ -50,7 +51,7 @@ class History:
                 value = (model.rate(p), None, None)
             else:
                 continue
-            self.points[(p, day)] = (value[0], value[1], value[2], self.played[p])
+            self.points[(pool, p, day)] = (value[0], value[1], value[2], self.played[(pool, p)])
 
 
 def save_run(
@@ -97,9 +98,9 @@ def save_run(
         session.execute(
             insert(RatingPoint),
             [
-                {"run_id": run.id, "player_id": p, "day": d, "rating": r, "rd": rd, "vol": vol,
-                 "played": n}
-                for (p, d), (r, rd, vol, n) in history.points.items()
+                {"run_id": run.id, "pool": pool_, "player_id": p, "day": d, "rating": r,
+                 "rd": rd, "vol": vol, "played": n}
+                for (pool_, p, d), (r, rd, vol, n) in history.points.items()
             ],
         )  # fmt: skip
     run.finished_at = datetime.now(UTC)

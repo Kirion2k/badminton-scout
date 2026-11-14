@@ -91,3 +91,23 @@ def test_reclassify_corrects_stored_events_in_context(session: Session) -> None:
     assert got["MD U15"] == ("WD", "junior")
     assert got["MS A"] == ("MS", "adult")
     assert got["GD U13"] == ("WD", "junior")
+
+
+def test_review_visibility_follows_the_corrected_reading(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import scout.privacy
+
+    monkeypatch.setattr(scout.privacy, "PUBLISH_RESTRICTED_EVENTS", False)
+    t = Tournament(source_id=DBV, source_key="t-vis", name="Synthetic")
+    session.add(t)
+    session.flush()
+    # stored by the English-only reading: "MD" as men's doubles, so adult and served
+    e = Event(tournament_id=t.id, source_key="MD U15", name="MD", discipline="MD",
+              redistributable=True)  # fmt: skip
+    other = Event(tournament_id=t.id, source_key="HE", name="HE", discipline=None)
+    session.add_all([e, other])
+    session.flush()
+    counts = reclassify(session, [t.id])
+    assert (e.discipline, e.category, e.redistributable) == ("WD", "junior", False)
+    assert counts["now private"] == 1

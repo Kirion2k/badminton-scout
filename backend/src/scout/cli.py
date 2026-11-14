@@ -205,6 +205,9 @@ def _import_locked(
                 )
         except BudgetExhausted:
             totals["stopped:budget_exhausted"] += 1
+        from scout.summary import refresh_quietly
+
+        refresh_quietly(s)  # coverage counts follow every import
     for name, n in sorted(totals.items()):
         print(f"  {name}: {n}")
     if totals["stopped:budget_exhausted"]:
@@ -535,6 +538,9 @@ def _withhold(args: argparse.Namespace) -> int:
         s.add(PrivacyAction(player_id=player.id, action=args.action, reason=args.reason,
                             actor=getpass.getuser()))  # fmt: skip
         s.commit()
+        from scout.summary import refresh_quietly
+
+        refresh_quietly(s)
         print(f"player {player.id}: {args.action} recorded ({1 + len(merged)} record(s))")
         if args.action == "withhold":
             # tournament-scoped ids and other federations create separate records for one person
@@ -613,6 +619,9 @@ def _minimise() -> int:
             sp.source_key = target
             players += 1
         s.commit()
+        from scout.summary import refresh_quietly
+
+        refresh_quietly(s)
     print(f"payloads rewritten: {revisions}; player keys rewritten: {players}")
     return 0
 
@@ -622,13 +631,23 @@ def _reclassify() -> int:
     from sqlalchemy.orm import Session
 
     from scout.db import get_engine
+    from scout.ingest import event_codes
     from scout.ingest.tournamentsoftware import discipline_of
-    from scout.models import Event
+    from scout.models import Event, Tournament
     from scout.privacy import is_redistributable_event
 
     with Session(get_engine()) as s:
-        changed = Counter[str]()
-        for e in s.scalars(select(Event)):
+        # Tournament Software events: read in their tournament's language, never English-only
+        # (an unclassified one is unclassified on purpose: docs/event-codes.md)
+        changed = Counter[str](
+            {k: v for k, v in event_codes.reclassify(s).items() if k.startswith("now ")}
+        )
+        others = (
+            select(Event)
+            .join(Tournament, Tournament.id == Event.tournament_id)
+            .where(Tournament.source_id.not_like("tournamentsoftware%"))
+        )
+        for e in s.scalars(others):
             if e.discipline is None and (found := discipline_of(e.name)):
                 e.discipline = found  # a newly recognised spelling (privacy._ALIASES)
                 changed["discipline recognised"] += 1
@@ -912,8 +931,11 @@ def main(argv: list[str] | None = None) -> None:
 
         if get_settings().env == "production":
             sys.exit("refusing to seed with SCOUT_ENV=production")
+        from scout.summary import refresh_quietly
+
         with Session(get_engine()) as s:
             ids = seed(s, Path(args.ids_out) if args.ids_out else None)
+            refresh_quietly(s)
         print(f"seeded e2e fixture: {ids}")
     elif args.command == "import-compilation":
         sys.exit(_import_compilation(args))

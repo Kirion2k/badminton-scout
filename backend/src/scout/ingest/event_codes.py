@@ -172,7 +172,9 @@ def reclassify(
 ) -> Counter[str]:
     """Re-read every Tournament Software event's discipline and category in the context of its
     tournament. Counts changes as "<source> <old>-><new>" (events and their matches)."""
+    import scout.privacy
     from scout.models import Event, Match, MatchSide, MatchSidePlayer, Tournament
+    from scout.privacy import is_redistributable_event
 
     q = (
         select(Event, Tournament.source_id)
@@ -182,7 +184,8 @@ def reclassify(
     if tournament_ids is not None:
         q = q.where(Event.tournament_id.in_(list(tournament_ids)))
     events = session.execute(q).all()
-    ids = [e.id for e, _ in events]
+    # the same events as a subquery: a full run covers too many ids for bind parameters
+    ids = q.with_only_columns(Event.id).scalar_subquery()
     per_side = (
         select(Match.event_id, func.count(MatchSidePlayer.position).label("n"))
         .join(MatchSide, MatchSide.match_id == Match.id)
@@ -217,6 +220,16 @@ def reclassify(
             counts[f"matches {source} {e.discipline}->{new}"] += matches.get(e.id, 0)
             if not dry_run:
                 e.discipline = new
+        # visibility follows the corrected reading (ADR-0009/0010), never the first one. The
+        # privacy allowlist reads names in English ("MD" looks adult), so when restricted events
+        # are hidden, the language-aware category must agree too (German "MD" is girls')
+        served = is_redistributable_event(e.name, new) and (
+            scout.privacy.PUBLISH_RESTRICTED_EVENTS or c.category == "adult"
+        )
+        if served != e.redistributable:
+            counts["now served" if served else "now private"] += 1
+            if not dry_run:
+                e.redistributable = served
         if c.category != e.category and not dry_run:
             e.category = c.category
     if not dry_run:
