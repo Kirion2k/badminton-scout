@@ -446,3 +446,18 @@ def test_a_portal_without_an_approved_date_search_does_not_backfill(
     obv = next(p for p in PORTALS.values() if p.key == "obv")
     assert not has_history_search(obv)
     assert has_history_search(BA)
+
+
+def test_a_portal_reads_page_one_and_splits_a_full_window(
+    engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sync_module, "has_history_search", has_history_search)
+    monkeypatch.setattr(sync_module, "BACKFILL_SEARCHES", 1)
+    day = TODAY - timedelta(days=40)
+    portal = Portal()
+    guids = [f"abababab-0000-0000-0000-{i:012d}" for i in range(25)]
+    portal.listing = [listed_on(g, day + timedelta(days=i % 9)) for i, g in enumerate(guids)]
+    portal.days = {g: {} for g in guids}  # listed only; nothing to import
+    run = sync(engine, session, portal, on=BA)
+    assert run.counts["backfill:searches"] > 1  # 20 on page one: the window was split
+    assert session.scalar(select(func.count()).select_from(TournamentDiscovery)) == 25
