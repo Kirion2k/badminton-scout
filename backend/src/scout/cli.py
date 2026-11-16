@@ -701,9 +701,8 @@ def _ratings(args: argparse.Namespace) -> int:
 
 
 def _matchups(args: argparse.Namespace) -> int:
-    """Prospective forecasts: recorded before the match, scored after (ADR-0013)."""
+    """Prospective forecasts against ADR-0013's release conditions (issued by `scout fixtures`)."""
     import json
-    from datetime import date
 
     from sqlalchemy.orm import Session
 
@@ -711,21 +710,59 @@ def _matchups(args: argparse.Namespace) -> int:
     from scout.ratings import prospective
 
     with Session(get_engine()) as s:
-        try:
-            if args.action == "issue":
-                row = prospective.issue(s, args.a, args.b, args.discipline,
-                                        date.fromisoformat(args.on), args.ref)  # fmt: skip
-                s.commit()
-                print(f"forecast {row.id} recorded at {row.issued_at}: P(a) = {row.p_a:.4f}")
-            elif args.action == "resolve":
-                counts = prospective.resolve(s, args.verified_by)
-                s.commit()
-                print(counts)
-            else:
-                print(json.dumps(prospective.score(s), indent=1, default=str))
-        except prospective.NotEligible as e:
-            print(f"not issued: {e}", file=sys.stderr)
-            return 2
+        print(json.dumps(prospective.score(s), indent=1, default=str))
+    return 0
+
+
+def _fixtures(args: argparse.Namespace) -> int:
+    """Fixtures from a provider, forecasts issued before their cutoff, verified results
+    (ADR-0014)."""
+    import getpass
+    import json
+
+    from sqlalchemy.orm import Session
+
+    from scout.db import get_engine
+    from scout.fixtures import store, sync
+    from scout.fixtures.providers import CuratedCsv
+    from scout.models import Fixture, SourcePlayer
+    from scout.ratings import prospective
+
+    who = f"human:{getpass.getuser()}"
+    with Session(get_engine()) as s:
+        if args.action == "import":
+            report = sync.sync(s, CuratedCsv(Path(args.path)), entered_by=who,
+                               issue=not args.no_issue)  # fmt: skip
+            s.commit()
+            print(json.dumps(report, indent=1, default=str))
+            return 1 if "failure" in report else 0
+        if args.action == "verify-result":
+            try:
+                f = store.verify(s, args.fixture, who)
+            except ValueError as e:
+                print(e, file=sys.stderr)
+                return 1
+            added = prospective.reconcile(s)
+            s.commit()
+            print(f"fixture {f.id} verified ({f.status}); void events added: {added}")
+        elif args.action == "unresolved":
+            run_id = prospective.production.latest_run(s)
+            seen: set[int] = set()
+            for f in s.scalars(select(Fixture).where(Fixture.status == "scheduled")
+                               .order_by(Fixture.scheduled_date)):  # fmt: skip
+                for sp in (f.side_a_player_id, f.side_b_player_id):
+                    if sp in seen or (run_id and store.resolved(s, sp, run_id, f.discipline)):
+                        continue
+                    seen.add(sp)
+                    p = s.get_one(SourcePlayer, sp)
+                    print(f"  source player {sp} {p.source_key} {p.display_name!r} "
+                          f"({f.discipline}, fixture {f.id} on {f.scheduled_date})")  # fmt: skip
+            print(f"unresolved players in scheduled fixtures: {len(seen)} "
+                  "(link with: scout identity link-fixture-player)")  # fmt: skip
+        elif args.action == "status":
+            print(json.dumps(sync.status(s), indent=1, default=str))
+        else:
+            print(json.dumps(sync.pilot(s), indent=1, default=str))
     return 0
 
 
@@ -795,6 +832,11 @@ def _identity(args: argparse.Namespace) -> int:
                               f"({a.source_key}) ~ {b.display_name!r} ({b.source_key})"
                               f"{f' [{c.note}]' if c.note else ''}")  # fmt: skip
                 print(f"open or deferred: {len(rows)}")
+            elif args.action == "link-fixture-player":
+                d = identity.link_fixture_player(s, args.source_player, args.to_player,
+                                                 args.reason, who)  # fmt: skip
+                s.commit()
+                print(f"linked: decision {d.id} (undo with: scout identity undo {d.id})")
             elif args.action == "merge":
                 d = identity.merge(s, args.id, args.reason, who, allow_deferred=True)
                 s.commit()
@@ -935,17 +977,20 @@ def main(argv: list[str] | None = None) -> None:
     au.add_argument("--bwf", type=int, required=True, help="BWF snapshot id")
     au.add_argument("--fed", type=int, required=True, help="federation snapshot id")
     au.add_argument("--out", type=Path, required=True)
-    mu = commands.add_parser("matchups", help="prospective forecasts (ADR-0013), internal only")
-    mu_actions = mu.add_subparsers(dest="action", required=True)
-    iss = mu_actions.add_parser("issue", help="record a forecast before the match is played")
-    iss.add_argument("--a", type=int, required=True, help="player id")
-    iss.add_argument("--b", type=int, required=True, help="player id")
-    iss.add_argument("--discipline", choices=["MS", "WS"], required=True)
-    iss.add_argument("--on", required=True, help="scheduled date, YYYY-MM-DD")
-    iss.add_argument("--ref", required=True, help="the match: tournament, draw and round")
-    res = mu_actions.add_parser("resolve", help="fill forecasts from imported verified results")
-    res.add_argument("--verified-by", required=True, help="who checked the imported results")
-    mu_actions.add_parser("score", help="resolved forecasts against the release conditions")
+    mu = commands.add_parser("matchups", help="prospective evaluation (ADR-0013), internal only")
+    mu.add_subparsers(dest="action", required=True).add_parser(
+        "score", help="forecasts against the release conditions"
+    )
+    fx = commands.add_parser("fixtures", help="fixtures and forecasts before play (ADR-0014)")
+    fx_actions = fx.add_subparsers(dest="action", required=True)
+    imp = fx_actions.add_parser("import", help="an operator's curated fixture CSV (kept off git)")
+    imp.add_argument("path", type=Path)
+    imp.add_argument("--no-issue", action="store_true", help="store fixtures, issue nothing")
+    ver = fx_actions.add_parser("verify-result", help="confirm a result someone else entered")
+    ver.add_argument("fixture", type=int)
+    fx_actions.add_parser("unresolved", help="players in scheduled fixtures not yet linked")
+    fx_actions.add_parser("status", help="freshness, missed fixtures and failures")
+    fx_actions.add_parser("pilot", help="the operational pilot report")
     events = commands.add_parser("events", help="event classification")
     reclassify = events.add_subparsers(dest="action", required=True).add_parser(
         "reclassify", help="re-read disciplines and categories from codes (docs/event-codes.md)"
@@ -962,6 +1007,12 @@ def main(argv: list[str] | None = None) -> None:
         p = ident_actions.add_parser(action, help=f"{action} a {what}")
         p.add_argument("id", type=int, help=f"{what} id")
         p.add_argument("--reason", required=True, help="why: kept in the audit log")
+    link = ident_actions.add_parser(
+        "link-fixture-player", help="a person's decision: this fixture player is that player"
+    )
+    link.add_argument("--source-player", type=int, required=True, help="fixture source player")
+    link.add_argument("--to-player", type=int, required=True, help="the existing player id")
+    link.add_argument("--reason", required=True, help="the evidence: kept in the audit log")
     report = commands.add_parser("report", help="data reports")
     reports = report.add_subparsers(dest="report", required=True)
     reports.add_parser("coverage", help="per-source coverage and data quality")
@@ -1013,6 +1064,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(actions[args.action]() if args.action in actions else _withhold(args))
     elif args.command == "matchups":
         sys.exit(_matchups(args))
+    elif args.command == "fixtures":
+        sys.exit(_fixtures(args))
     elif args.command == "events":
         sys.exit(_events(args))
     elif args.command == "ratings":

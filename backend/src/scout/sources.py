@@ -96,6 +96,13 @@ SOURCES: Mapping[str, SourceRights] = MappingProxyType(
                 "docs/data-sources.md."
             ),
         ),
+        # A person reads bwfbadminton.com (in BWF's scope above) and enters fixtures and results
+        # in a CSV: a file import with no hosts, so no request budget (ADR-0014).
+        "bwf_curated": SourceRights(
+            grants=frozenset(Use),
+            evidence=_OWNER_ATTESTED.format(provider="BWF")
+            + " Entered by hand from bwfbadminton.com; owner decision 2026-11-15 (M8.2).",
+        ),
         "bwf": SourceRights(
             grants=frozenset(Use),
             evidence=_OWNER_ATTESTED.format(provider="BWF"),

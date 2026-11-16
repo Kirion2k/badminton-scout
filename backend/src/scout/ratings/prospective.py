@@ -1,19 +1,26 @@
-"""Prospective evaluation (ADR-0013): forecasts recorded before their match, scored later
-against verified results. This is the only evidence that can release public probabilities."""
+"""Prospective evaluation (ADR-0013, ADR-0014): forecasts recorded against a fixture before its
+cutoff, scored later against its verified result. This is the only evidence that can release
+public probabilities."""
 
 import random
-from dataclasses import asdict
-from datetime import UTC, date, datetime, timedelta
-from typing import Any, Literal
+from collections import Counter
+from dataclasses import asdict, dataclass
+from datetime import timedelta
+from typing import Any, Literal, cast
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from scout import matchups
 from scout.analytics import metrics
 from scout.analytics.models import WinRate
 from scout.analytics.replay import replay
+from scout.fixtures import store
+from scout.fixtures.providers import CURATED_SOURCE
 from scout.models import (
+    Fixture,
+    ForecastEvent,
+    IngestRun,
     IssuedPrediction,
     Player,
     RatingCurrent,
@@ -27,7 +34,9 @@ from scout.ratings.dataset import BWF_SOURCE, load
 RELEASE_MIN_RESOLVED = 1_000  # ADR-0013, condition 1
 RELEASE_MAX_ECE_UPPER = 0.04  # condition 3
 RELEASE_MIN_BIN = 200  # condition 4: bins judged only from this many forecasts
-MATCH_WINDOW = timedelta(days=3)
+MAX_FIXTURE_AGE = timedelta(hours=24)  # older fixture data may miss a change of time or players
+EVIDENCE_SOURCES = frozenset({CURATED_SOURCE})  # where forecasts may be issued from (ADR-0014)
+BWF_RESULT_SOURCES = (BWF_SOURCE, "bwf")
 
 
 class NotEligible(Exception):
@@ -53,126 +62,183 @@ def _rated(session: Session, run_id: int, pool: str, player: int) -> matchups.Ra
     )
 
 
-def issue(
-    session: Session, a: int, b: int, discipline: Literal["MS", "WS"], on: date, ref: str
-) -> IssuedPrediction:
-    """Record a forecast for a match scheduled after the ratings' last match day. Refuses
-    anything the route would refuse a probability for (except the public flag)."""
+def _ratings_current(session: Session, s: matchups.Served) -> None:
+    """Refuse when BWF results were imported after the served ratings were built: the ratings
+    would not reflect what is already known."""
+    newer = session.scalar(
+        select(func.count()).select_from(IngestRun).where(
+            IngestRun.source_id.in_(BWF_RESULT_SOURCES), IngestRun.status == "succeeded",
+            IngestRun.finished_at > s.computed_at,
+        )
+    )  # fmt: skip
+    if newer:
+        raise NotEligible("stale rating snapshot: BWF results were imported after the served "
+                          "run; run `scout ratings serve-bwf`")  # fmt: skip
+
+
+def issue_for_fixture(session: Session, fixture_id: int) -> IssuedPrediction:
+    """Record a forecast for a fixture before its cutoff (ADR-0014). Refuses anything the route
+    would refuse a probability for (except the public flag), and anything not provably before
+    the match."""
+    f = session.get(Fixture, fixture_id, with_for_update=True)
+    if f is None:
+        raise NotEligible(f"no fixture {fixture_id}")
+    now = session.execute(select(func.clock_timestamp())).scalar_one()  # the database's clock
+    if f.source_id not in EVIDENCE_SOURCES:
+        raise NotEligible(f"{f.source_id} is not a fixture source forecasts are issued from")
+    if f.status != "scheduled":
+        raise NotEligible(f"the fixture is {f.status}, not scheduled")
+    if f.duplicate_of is not None or session.scalar(
+        select(Fixture.id).where(Fixture.duplicate_of == f.id).limit(1)
+    ):
+        raise NotEligible("the fixture is listed twice: resolve the duplicate first")
+    if now - f.retrieved_at > MAX_FIXTURE_AGE:
+        raise NotEligible("stale fixture data: last checked over 24 hours ago")
+    cut = store.fixture_cutoff(f)
+    if now >= cut:
+        raise NotEligible(f"past the cutoff ({cut.isoformat()}): the match may have started")
+    already = session.scalar(select(IssuedPrediction.id).where(IssuedPrediction.fixture_id == f.id))
+    if already is not None:
+        raise NotEligible(f"forecast {already} already covers this fixture")
     s = _served(session)
-    today = datetime.now(UTC).date()
-    if on <= max(s.data_as_of, today):
-        # a forecast is evidence only if made before the match: never for today or the past
-        raise NotEligible(f"the match must be after today and after the ratings' data "
-                          f"({s.data_as_of})")  # fmt: skip
+    if f.scheduled_date <= s.data_as_of:
+        raise NotEligible(f"the match must be after the ratings' data ({s.data_as_of})")
+    _ratings_current(session, s)
+    disc = cast(Literal["MS", "WS"], f.discipline)
+    a = store.resolved(session, f.side_a_player_id, s.run_id, disc)
+    b = store.resolved(session, f.side_b_player_id, s.run_id, disc)
+    if a is None or b is None:
+        raise NotEligible("unresolved player: not linked to a rated BWF player")
     if a == b:
-        raise NotEligible("a player cannot be compared with themselves")
+        raise NotEligible("both sides resolve to the same player")
     pair = (min(a, b), max(a, b))
-    already = session.scalar(
+    same_match = session.scalar(
         select(IssuedPrediction.id).where(
-            IssuedPrediction.discipline == discipline,
-            IssuedPrediction.scheduled_on == on,
+            IssuedPrediction.discipline == disc,
+            IssuedPrediction.scheduled_on == f.scheduled_date,
             func.least(IssuedPrediction.player_a, IssuedPrediction.player_b) == pair[0],
             func.greatest(IssuedPrediction.player_a, IssuedPrediction.player_b) == pair[1],
         )
     )
-    if already is not None:
-        raise NotEligible(f"forecast {already} already covers this match")
-    pool = f"bwf:{discipline}"
+    if same_match is not None:
+        raise NotEligible(f"forecast {same_match} already covers this match")
+    pool = f"bwf:{disc}"
     ra, rb = _rated(session, s.run_id, pool, a), _rated(session, s.run_id, pool, b)
-    if why := matchups.blocker(ra, rb, discipline):
+    if why := matchups.blocker(ra, rb, disc):
         raise NotEligible(why[1])
     snap = session.get(RatingSnapshot, s.snapshot_id)
     run = session.get(RatingRun, s.run_id)
     if snap is None or run is None:
         raise NotEligible("the served run or its snapshot is missing")
     row = IssuedPrediction(
-        scheduled_on=on, match_ref=ref, discipline=discipline, player_a=a, player_b=b,
-        p_a=matchups.probability(ra, rb, s, on), config_hash=s.version,
+        issued_at=now, scheduled_on=f.scheduled_date, match_ref=f"{f.source_id}:{f.source_key}",
+        discipline=disc, player_a=a, player_b=b,
+        p_a=matchups.probability(ra, rb, s, f.scheduled_date), config_hash=s.version,
         calibration_hash=run.metrics["calibration_hash"], run_id=s.run_id,
-        snapshot_id=s.snapshot_id, snapshot_hash=snap.content_hash,
+        snapshot_id=s.snapshot_id, snapshot_hash=snap.content_hash, fixture_id=f.id,
+        fixture_revision_id=f.revision_id, cutoff_at=cut,
     )  # fmt: skip
     session.add(row)
     session.flush()
     return row
 
 
-def resolve(session: Session, verified_by: str) -> dict[str, int]:
-    """Fill each open forecast whose match has been imported from the authorised BWF source:
-    the same two players on opposite sides, same discipline, within 3 days, completed. A forecast
-    matching zero or several results stays open."""
-    counts = {"resolved": 0, "no_result_yet": 0, "ambiguous": 0}
-    canonical = dict(
-        session.execute(
-            text(
-                """with recursive up(id, root) as (
-                       select id, id from player where merged_into_id is null
-                       union all
-                       select p.id, up.root from player p join up on p.merged_into_id = up.id)
-                   select pl.source_player_id, up.root from player_link pl
-                   join up on up.id = pl.player_id"""
+@dataclass(frozen=True)
+class Outcome:
+    kind: Literal["scored", "void", "conflict", "pending"]
+    reason: str
+    a_won: bool | None = None
+
+
+def outcome(session: Session, p: IssuedPrediction) -> Outcome:
+    """A forecast's outcome from its fixture's current, verified state (ADR-0014)."""
+    f = session.get_one(Fixture, p.fixture_id)
+    if session.scalar(select(ForecastEvent.id).where(
+        ForecastEvent.fixture_id == f.id, ForecastEvent.kind == "conflict").limit(1)
+    ):  # fmt: skip
+        return Outcome("conflict", "the verified result changed")
+    if not store.is_verified(f):
+        return Outcome("pending", f"{f.status}, result not verified"
+                       if f.status in store.TERMINAL else f.status)  # fmt: skip
+    sides = (store.player_of(session, f.side_a_player_id),
+             store.player_of(session, f.side_b_player_id))  # fmt: skip
+    forecast = (store.canonical(session, p.player_a), store.canonical(session, p.player_b))
+    if set(sides) != set(forecast):
+        return Outcome("void", "players changed after the forecast")
+    if store.fixture_cutoff(f) <= p.issued_at:
+        return Outcome("void", "issued after the corrected start")
+    if f.status != "completed":
+        return Outcome("void", f.status)
+    if f.winner_side is None:  # never: the import requires a winner for a completed fixture
+        return Outcome("pending", "completed without a winner")
+    return Outcome("scored", "completed", sides[f.winner_side - 1] == forecast[0])
+
+
+def reconcile(session: Session) -> int:
+    """Append a void event for each forecast newly found void (the audit trail; scoring itself
+    recomputes outcomes). Returns the number of events added."""
+    added = 0
+    for p in session.scalars(select(IssuedPrediction).order_by(IssuedPrediction.id)):
+        o = outcome(session, p)
+        if o.kind != "void":
+            continue
+        f = session.get_one(Fixture, p.fixture_id)
+        seen = session.scalar(select(ForecastEvent.id).where(
+            ForecastEvent.prediction_id == p.id, ForecastEvent.kind == "void",
+            ForecastEvent.fixture_revision_id == f.revision_id, ForecastEvent.reason == o.reason,
+        ).limit(1))  # fmt: skip
+        if seen is None:
+            session.add(
+                ForecastEvent(
+                    kind="void",
+                    reason=o.reason,
+                    fixture_id=f.id,
+                    fixture_revision_id=f.revision_id,
+                    prediction_id=p.id,
+                )
             )
-        ).all()
-    )
-    q = text(
-        """select m.id, m.winner_side, ms.side, msp.source_player_id
-           from match m
-           join event e on e.id = m.event_id and e.discipline = :disc
-           join tournament t on t.id = e.tournament_id and t.source_id = :source
-           join match_side ms on ms.match_id = m.id
-           join match_side_player msp on msp.match_side_id = ms.id
-           where m.status = 'completed' and m.played_on between :lo and :hi"""
-    )
-    for f in session.scalars(select(IssuedPrediction).where(IssuedPrediction.a_won.is_(None))):
-        # only a match played on or after the day the forecast was made can resolve it
-        lo = max(f.scheduled_on - MATCH_WINDOW, f.issued_at.date())
-        args = {"disc": f.discipline, "source": BWF_SOURCE, "lo": lo,
-                "hi": f.scheduled_on + MATCH_WINDOW}  # fmt: skip
-        sides_a: dict[int, tuple[int, int]] = {}
-        sides_b: dict[int, int] = {}
-        for m, w, side, sp in session.execute(q, args):
-            if canonical.get(sp) == f.player_a:
-                sides_a[m] = (w, side)
-            elif canonical.get(sp) == f.player_b:
-                sides_b[m] = side
-        found = [(m, w, side) for m, (w, side) in sides_a.items()
-                 if m in sides_b and sides_b[m] != side]  # fmt: skip
-        if not found:
-            counts["no_result_yet"] += 1
-            continue
-        if len(found) > 1:
-            counts["ambiguous"] += 1
-            continue
-        match_id, winner, side = found[0]
-        f.a_won, f.resolved_match_id = winner == side, match_id
-        f.resolved_at, f.verified_by = datetime.now(UTC), verified_by
-        counts["resolved"] += 1
+            added += 1
     session.flush()
-    return counts
+    return added
 
 
 def score(session: Session, *, boot: int = 1000) -> dict[str, Any]:
-    """Resolved forecasts against ADR-0013's release conditions, with the win-rate baseline (from
-    the same snapshot, so it knows nothing the forecast did not) on the same matches."""
-    done = list(
-        session.scalars(select(IssuedPrediction).where(IssuedPrediction.a_won.is_not(None)))
-    )
-    out: dict[str, Any] = {"resolved": len(done), "conditions": {}}
+    """Forecasts from evidence sources against ADR-0013's release conditions, with the win-rate
+    baseline (from the same snapshot, so it knows nothing the forecast did not) on the same
+    matches. Outcomes are recomputed from the fixtures: the same database gives the same report."""
+    counts: Counter[str] = Counter()
+    voids: Counter[str] = Counter()
+    done: list[tuple[IssuedPrediction, bool]] = []
+    for p in session.scalars(
+        select(IssuedPrediction).join(Fixture, Fixture.id == IssuedPrediction.fixture_id)
+        .where(Fixture.source_id.in_(EVIDENCE_SOURCES)).order_by(IssuedPrediction.id)
+    ):  # fmt: skip
+        o = outcome(session, p)
+        counts[o.kind] += 1
+        if o.kind == "void":
+            voids[o.reason] += 1
+        if o.kind == "scored":
+            done.append((p, bool(o.a_won)))
+    out: dict[str, Any] = {
+        "issued": sum(counts.values()), "resolved": len(done), "void": dict(voids),
+        "pending": counts["pending"], "conflict": counts["conflict"], "conditions": {},
+    }  # fmt: skip
     if not done:
         out["status"] = "no resolved forecasts: release conditions cannot be assessed"
         return out
-    ps, ys = [f.p_a for f in done], [int(bool(f.a_won)) for f in done]
-    clusters = [f.resolved_match_id or f.id for f in done]
+    ps, ys = [f.p_a for f, _ in done], [int(won) for _, won in done]
+    clusters = [f.fixture_id for f, _ in done]
     ll = metrics.cluster_bootstrap(metrics.log_losses(ps, ys), clusters, n=boot)
     baseline: dict[int, WinRate] = {}
     diffs: list[float] = []
-    for f in done:
+    for f, won in done:
         if f.snapshot_id not in baseline:
             wr = WinRate(prior=2.0)
             rows = load(session, f.snapshot_id, "bwf:MS") + load(session, f.snapshot_id, "bwf:WS")
             replay(wr, bt.scored(rows))
             baseline[f.snapshot_id] = wr
         q = baseline[f.snapshot_id].predict(f.player_a, f.player_b)
-        y = int(bool(f.a_won))
+        y = int(won)
         diffs.append(metrics.log_losses([f.p_a], [y])[0] - metrics.log_losses([q], [y])[0])
     vs = metrics.cluster_bootstrap(diffs, clusters, n=boot)
     # ECE's 95% upper bound: resample the resolved forecasts (seeded)
