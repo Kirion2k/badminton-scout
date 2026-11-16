@@ -11,7 +11,7 @@ from typing import Any, Literal, cast
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from scout import matchups
+from scout import identity, matchups
 from scout.analytics import metrics
 from scout.analytics.models import WinRate
 from scout.analytics.replay import replay
@@ -88,9 +88,7 @@ def issue_for_fixture(session: Session, fixture_id: int) -> IssuedPrediction:
         raise NotEligible(f"{f.source_id} is not a fixture source forecasts are issued from")
     if f.status != "scheduled":
         raise NotEligible(f"the fixture is {f.status}, not scheduled")
-    if f.duplicate_of is not None or session.scalar(
-        select(Fixture.id).where(Fixture.duplicate_of == f.id).limit(1)
-    ):
+    if store.duplicates(session, f):
         raise NotEligible("the fixture is listed twice: resolve the duplicate first")
     if now - f.retrieved_at > MAX_FIXTURE_AGE:
         raise NotEligible("stale fixture data: last checked over 24 hours ago")
@@ -160,8 +158,8 @@ def outcome(session: Session, p: IssuedPrediction) -> Outcome:
     if not store.is_verified(f):
         return Outcome("pending", f"{f.status}, result not verified"
                        if f.status in store.TERMINAL else f.status)  # fmt: skip
-    sides = (store.player_of(session, f.side_a_player_id),
-             store.player_of(session, f.side_b_player_id))  # fmt: skip
+    sides = (identity.player_of(session, f.side_a_player_id),
+             identity.player_of(session, f.side_b_player_id))  # fmt: skip
     forecast = (store.canonical(session, p.player_a), store.canonical(session, p.player_b))
     if set(sides) != set(forecast):
         return Outcome("void", "players changed after the forecast")
@@ -178,7 +176,15 @@ def reconcile(session: Session) -> int:
     """Append a void event for each forecast newly found void (the audit trail; scoring itself
     recomputes outcomes). Returns the number of events added."""
     added = 0
-    for p in session.scalars(select(IssuedPrediction).order_by(IssuedPrediction.id)):
+    # only a verified fixture can make a forecast void
+    verified = (
+        select(IssuedPrediction)
+        .join(Fixture, Fixture.id == IssuedPrediction.fixture_id)
+        .where(Fixture.result_verified_revision_id == Fixture.revision_id)
+        .order_by(IssuedPrediction.id)
+    )
+    # shortcut: a few queries per verified forecast, fine for thousands; batch if it grows slow
+    for p in session.scalars(verified):
         o = outcome(session, p)
         if o.kind != "void":
             continue

@@ -36,11 +36,17 @@ provisions an official feed, the only provider is an operator entering fixtures 
   - winner and score;
   - when the source data was checked (`retrieved_at`).
 - **Players** are keyed by their BWF profile id. A curated row without one is rejected.
-- **Duplicates:** a second key for the same pair, discipline and day is flagged `duplicate_of`.
-  Neither fixture can be forecast.
+- **Duplicates:** another live (not cancelled) fixture of the same source for the same pair,
+  discipline and day blocks both. It is checked when issuing, so cancelling a mistyped row clears
+  it.
+- **Readings:** a reading older than the stored one is ignored. A check time in the future is
+  rejected.
 - **Results count only when verified:**
-  - by a different person from the one who entered them;
+  - by a different person from the one who typed them (the CSV's `entered_by`);
   - on the current revision. A later correction clears the verification.
+- **Limit of the four-eyes check:** people are named by the operating-system user and the CSV.
+  That prevents mistakes, not deliberate fraud by a trusted operator. Authenticated operators
+  need a hosted tool, which does not exist yet.
 
 ### Player identity
 - A fixture player is resolved when their source player belongs to a rated BWF player.
@@ -78,7 +84,7 @@ same evaluation.
 | State | Outcome |
 |---|---|
 | Verified `completed` with a winner | scored |
-| `walkover`, `retired`, `abandoned` or `cancelled` | void (ADR-0012 eligibility) |
+| Verified `walkover`, `retired`, `abandoned` or `cancelled` | void (ADR-0012 eligibility) |
 | The current revision's cutoff is at or before the issue time (the start moved earlier) | void |
 | The fixture's players no longer resolve to the forecast's players (replaced, or a link undone) | void |
 | A verified winner differs from an earlier verified winner | conflict: excluded and reported |

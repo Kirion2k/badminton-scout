@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from scout.fixtures.providers import FIXTURE_SOURCES
 from scout.models import IdentityCandidate, IdentityDecision, Player, PlayerLink, SourcePlayer
 
 
@@ -52,7 +53,7 @@ def _links(session: Session, player_ids: list[int]) -> dict[str, Any]:
     }
 
 
-def _player_of(session: Session, source_player_id: int) -> int:
+def player_of(session: Session, source_player_id: int) -> int:
     player = session.scalar(
         select(PlayerLink.player_id).where(PlayerLink.source_player_id == source_player_id)
     )
@@ -74,8 +75,8 @@ def merge(
     c = session.get(IdentityCandidate, candidate_id)
     if c is None or c.status not in (("open", "deferred") if allow_deferred else ("open",)):
         raise ValueError(f"candidate {candidate_id} is not open")
-    keep = _player_of(session, c.source_player_a_id)
-    gone = _player_of(session, c.source_player_b_id)
+    keep = player_of(session, c.source_player_a_id)
+    gone = player_of(session, c.source_player_b_id)
     if keep_b:
         keep, gone = gone, keep
     if keep == gone:
@@ -183,7 +184,11 @@ def link_fixture_player(
     target = session.get(Player, player_id)
     if target is None or target.merged_into_id is not None or target.withheld_at is not None:
         raise ValueError(f"player {player_id} is not a current, published player")
-    own = _player_of(session, source_player_id)
+    sp = session.get(SourcePlayer, source_player_id)
+    if sp is None or sp.source_id not in FIXTURE_SOURCES:
+        # other sources' identities go through candidate review (ADR-0003, ADR-0011)
+        raise ValueError(f"source player {source_player_id} is not from a fixture source")
+    own = player_of(session, source_player_id)
     if own == player_id:
         raise ValueError("already linked to that player")
     if session.scalar(select(func.count()).select_from(PlayerLink)

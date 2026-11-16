@@ -97,7 +97,6 @@ def upgrade() -> None:
         sa.Column("first_seen_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("raw_record_id", sa.BigInteger(), nullable=False),
         sa.Column("revision_id", sa.BigInteger(), nullable=False),
-        sa.Column("duplicate_of", sa.BigInteger(), nullable=True),
         sa.Column("result_entered_by", sa.Text(), nullable=True),
         sa.Column("result_verified_by", sa.Text(), nullable=True),
         sa.Column("result_verified_at", sa.DateTime(timezone=True), nullable=True),
@@ -113,7 +112,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["raw_record_id"], ["raw_record.id"], name=op.f("fk_fixture_raw_record_id_raw_record")),
         sa.ForeignKeyConstraint(["revision_id"], ["raw_record_revision.id"], name=op.f("fk_fixture_revision_id_raw_record_revision")),
         sa.ForeignKeyConstraint(["result_verified_revision_id"], ["raw_record_revision.id"], name=op.f("fk_fixture_result_verified_revision_id_raw_record_revision")),
-        sa.ForeignKeyConstraint(["duplicate_of"], ["fixture.id"], name=op.f("fk_fixture_duplicate_of_fixture")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_fixture")),
         sa.UniqueConstraint("source_id", "source_key", name=op.f("uq_fixture_source_id_source_key")),
     )  # fmt: skip
@@ -182,5 +180,6 @@ def downgrade() -> None:
     )
     op.add_column("issued_prediction", sa.Column("verified_by", sa.Text(), nullable=True))
     op.drop_table("fixture")
+    # fails while records still reference the source (as 0022): the whole downgrade rolls back
     op.execute(sa.text("DELETE FROM source WHERE id = :id").bindparams(id=SOURCE))
     op.execute(M81_GUARD)

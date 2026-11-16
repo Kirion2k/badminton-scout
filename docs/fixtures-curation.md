@@ -17,14 +17,15 @@ changed is not stored again.
 | `discipline` | `MS` or `WS` |
 | `round` | e.g. `R32`, `QF` (optional) |
 | `scheduled_date` | Local date, `YYYY-MM-DD` |
-| `scheduled_start` | Local start time `HH:MM`, only if the order of play gives one. Leave it empty for "not before" or "follows" times |
+| `scheduled_start` | The venue's local start time `HH:MM` (no offset), only if the order of play gives one. Leave it empty for "not before" or "follows" times |
 | `timezone` | The venue's IANA zone, e.g. `Asia/Tokyo`, `Europe/Copenhagen` |
 | `status` | `scheduled`, `postponed`, `live`, `completed`, `walkover`, `retired`, `abandoned`, `cancelled` |
 | `player_a_bwf_id`, `player_b_bwf_id` | The number in the player's BWF profile URL. **Required:** a name alone is never enough |
 | `player_a_name`, `player_b_name` | As shown |
 | `winner` | `A`, `B` or empty. Required for `completed`; allowed for `retired` and `walkover` |
 | `score` | Games, e.g. `21-15 18-21 21-19` (optional) |
-| `checked_at` | When you looked, with a UTC offset, e.g. `2026-11-20T08:15:00+00:00` |
+| `checked_at` | When you looked, with a UTC offset, e.g. `2026-11-20T08:15:00+00:00`. A reading older than the stored one is ignored; a future time is rejected |
+| `entered_by` | Who typed the result. Required once there is a result; that person cannot verify it |
 
 ## Daily routine
 1. **Before each day's play,** update the rows from the order of play: times, status and player
@@ -51,5 +52,7 @@ changed is not stored again.
    - The person who entered a result cannot verify it.
    - Correcting a result needs verifying again.
    - A verified result that later changes is reported as a conflict and never scored.
-5. **Check the pipeline** with `scout fixtures status` (missed fixtures and why, failures) and
+5. **A mistyped `fixture_key`** leaves two rows for one match, and neither is forecast. Keep
+   the wrong row and set its status to `cancelled`.
+6. **Check the pipeline** with `scout fixtures status` (missed fixtures and why, failures) and
    `scout fixtures pilot` (the operational pilot report).

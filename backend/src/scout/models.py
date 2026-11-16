@@ -571,7 +571,6 @@ class Fixture(Base):
     first_seen_at: Mapped[datetime] = mapped_column(server_default=func.now())
     raw_record_id: Mapped[int] = mapped_column(ForeignKey("raw_record.id"))
     revision_id: Mapped[int] = mapped_column(ForeignKey("raw_record_revision.id"))
-    duplicate_of: Mapped[int | None] = mapped_column(ForeignKey("fixture.id"))
     result_entered_by: Mapped[str | None] = mapped_column(Text)
     result_verified_by: Mapped[str | None] = mapped_column(Text)
     result_verified_at: Mapped[datetime | None]

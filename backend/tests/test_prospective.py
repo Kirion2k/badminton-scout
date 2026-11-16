@@ -261,10 +261,14 @@ def test_a_changed_verified_result_is_a_reported_conflict(session: Session, read
 def test_a_fixture_listed_twice_gets_no_forecast(session: Session, ready: Fixture) -> None:
     put(session, dataclasses.replace(BASE, key="SYN-2026-MS-R16-1-again", players=(P2, P1)))
     again = fixture(session, "SYN-2026-MS-R16-1-again")
-    assert again.duplicate_of == ready.id
+    assert store.duplicates(session, ready) == [again.id]
     for f in (ready, again):
         with pytest.raises(prospective.NotEligible, match="listed twice"):
             prospective.issue_for_fixture(session, f.id)
+    # the operator cancels the mistyped row: the real one can be forecast again
+    put(session, dataclasses.replace(BASE, key="SYN-2026-MS-R16-1-again", players=(P2, P1),
+                                     status="cancelled", entered_by="human:op1"))  # fmt: skip
+    assert prospective.issue_for_fixture(session, ready.id).fixture_id == ready.id
 
 
 def test_a_same_name_player_is_never_linked_automatically(
@@ -278,14 +282,26 @@ def test_a_same_name_player_is_never_linked_automatically(
     with pytest.raises(ValueError, match="by a person"):
         identity.link_fixture_player(session, sp(session, "bwf-player:201"), ids["alex"], "x",
                                      "auto:name")  # fmt: skip
+    # a federation player's identity goes through candidate review, never this shortcut
+    other = session.scalars(select(SourcePlayer.id).filter_by(source_id="synthetic")).first()
+    assert other is not None
+    with pytest.raises(ValueError, match="not from a fixture source"):
+        identity.link_fixture_player(session, other, ids["alex"], "x", "human:op1")
 
 
 def test_ineligible_ratings_or_stale_data_get_no_forecast(
     session: Session, ready: Fixture, ids: dict[str, int]
 ) -> None:
-    put(session, dataclasses.replace(BASE, retrieved_at=NOW - timedelta(hours=25)), issue=False)
-    # the newer check stays: an older reading never makes the fixture stale again
-    assert fixture(session).retrieved_at == NOW
+    # an older reading (here: an earlier start) is ignored, never applied under the newer time
+    old = dataclasses.replace(BASE, retrieved_at=NOW - timedelta(hours=25),
+                              scheduled_start=START - timedelta(hours=2))  # fmt: skip
+    assert put(session, old, issue=False)["older_readings_ignored"] == 1
+    assert fixture(session).scheduled_start == START and fixture(session).retrieved_at == NOW
+    # a check time in the future is rejected: it would keep the fixture "fresh"
+    ahead = dataclasses.replace(BASE, retrieved_at=NOW + timedelta(days=365))
+    assert put(session, ahead, issue=False)["rejected"] == [
+        f"{BASE.key}: checked_at is in the future"
+    ]
     stale = dataclasses.replace(BASE, key="old-check", players=(P1, P3),
                                 retrieved_at=NOW - timedelta(hours=25))  # fmt: skip
     put(session, stale)
@@ -340,7 +356,7 @@ GOOD = {
     "discipline": "WS", "round": "QF", "scheduled_date": "2027-03-04", "scheduled_start": "14:30",
     "timezone": "Europe/Paris", "status": "scheduled", "player_a_bwf_id": "11",
     "player_a_name": "A Synthetic", "player_b_bwf_id": "12", "player_b_name": "B Synthetic",
-    "winner": "", "score": "", "checked_at": "2027-03-03T09:00:00+00:00",
+    "winner": "", "score": "", "checked_at": "2027-03-03T09:00:00+00:00", "entered_by": "",
 }  # fmt: skip
 
 
@@ -351,7 +367,9 @@ def test_curated_rows_are_parsed_strictly(tmp_path: Path) -> None:
     for change, why in (
         ({"player_a_bwf_id": ""}, "BWF profile id"),  # a name alone never identifies a player
         ({"timezone": "Mars/Base"}, "unknown timezone"),
-        ({"status": "completed"}, "needs a winner"),
+        ({"status": "completed", "entered_by": "op1"}, "needs a winner"),
+        ({"status": "completed", "winner": "A"}, "entered_by"),  # who typed it: four eyes
+        ({"scheduled_start": "05:30+00:00"}, "without an offset"),
         ({"winner": "A"}, "has no winner"),
         ({"checked_at": "2027-03-03T09:00:00"}, "UTC offset"),
         ({"discipline": "MD"}, "MS or WS"),
@@ -370,3 +388,18 @@ def test_curated_rows_are_parsed_strictly(tmp_path: Path) -> None:
     path.write_text("fixture_key\nSYN-1\n")
     with pytest.raises(ProviderError, match="missing columns"):
         CuratedCsv(path).fetch()
+
+
+def test_reimporting_records_no_new_refusals(session: Session, ready: Fixture) -> None:
+    prospective.issue_for_fixture(session, ready.id)
+    before = session.scalars(select(ForecastEvent)).all()
+    report = put(session, BASE)
+    assert report["refused"] == {} and session.scalars(select(ForecastEvent)).all() == before
+
+
+def test_the_typist_of_a_result_cannot_verify_it(session: Session, ready: Fixture) -> None:
+    # op2 imports a result op1 typed: op1 still cannot verify it
+    put(session, dataclasses.replace(BASE, status="completed", winner_side=1,
+                                     entered_by="human:op1"), by="human:op2")  # fmt: skip
+    with pytest.raises(ValueError, match="someone other"):
+        store.verify(session, ready.id, "human:op1")

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from scout import identity
 from scout.fixtures.providers import FixtureRow
 from scout.ingest.raw import record_payload
 from scout.ingest.tournamentsoftware import PlayerRef, get_or_create_source_player
@@ -16,7 +17,6 @@ from scout.models import (
     IngestRun,
     IssuedPrediction,
     Player,
-    PlayerLink,
     RatingCurrent,
     RawRecord,
     RawRecordRevision,
@@ -38,16 +38,19 @@ def fixture_cutoff(f: Fixture) -> datetime:
     return cutoff(f.scheduled_start, f.scheduled_date, f.timezone)
 
 
-def upsert(session: Session, run: IngestRun, row: FixtureRow, entered_by: str) -> Fixture:
+def upsert(session: Session, run: IngestRun, row: FixtureRow, imported_by: str) -> Fixture | None:
     """Store the provider's current statement of a fixture. A changed statement is a new
-    revision, entered by `entered_by`, and needs verifying again."""
+    revision and needs verifying again. A reading older than the stored one is ignored (None):
+    it must never overwrite newer data while keeping the newer check time."""
+    f = session.scalar(select(Fixture).filter_by(source_id=run.source_id, source_key=row.key))
+    if f is not None and row.retrieved_at < f.retrieved_at:
+        return None
     record_payload(session, run, row.key, row.payload())
     record = session.scalars(
         select(RawRecord).filter_by(source_id=run.source_id, source_record_key=row.key)
     ).one()
     a, b = (get_or_create_source_player(session, run.source_id, PlayerRef(k, n))
             for k, n in row.players)  # fmt: skip
-    f = session.scalar(select(Fixture).filter_by(source_id=run.source_id, source_key=row.key))
     if f is None or f.revision_id != record.current_revision_id:
         values = {
             "tournament_key": row.tournament_key, "tournament_name": row.tournament_name,
@@ -55,7 +58,8 @@ def upsert(session: Session, run: IngestRun, row: FixtureRow, entered_by: str) -
             "scheduled_start": row.scheduled_start, "scheduled_date": row.scheduled_date,
             "timezone": row.timezone, "status": row.status, "side_a_player_id": a.id,
             "side_b_player_id": b.id, "winner_side": row.winner_side, "score": row.score,
-            "revision_id": record.current_revision_id, "result_entered_by": entered_by,
+            "revision_id": record.current_revision_id,
+            "result_entered_by": row.entered_by or imported_by,
             # the last verified revision stays recorded, so a changed result is detectable
             "result_verified_by": None, "result_verified_at": None,
         }  # fmt: skip
@@ -66,18 +70,23 @@ def upsert(session: Session, run: IngestRun, row: FixtureRow, entered_by: str) -
         else:
             for k, v in values.items():
                 setattr(f, k, v)
-    f.retrieved_at = max(f.retrieved_at, row.retrieved_at)
-    session.flush()
-    f.duplicate_of = session.scalar(
-        select(func.min(Fixture.id)).where(
-            Fixture.source_id == f.source_id, Fixture.id < f.id,
-            Fixture.discipline == f.discipline, Fixture.scheduled_date == f.scheduled_date,
-            or_((Fixture.side_a_player_id == a.id) & (Fixture.side_b_player_id == b.id),
-                (Fixture.side_a_player_id == b.id) & (Fixture.side_b_player_id == a.id)),
-        )
-    )  # fmt: skip
+    f.retrieved_at = row.retrieved_at
     session.flush()
     return f
+
+
+def duplicates(session: Session, f: Fixture) -> list[int]:
+    """Other live fixtures of the same source for the same pair, discipline and day. Checked
+    when issuing, so correcting or cancelling the other row clears it. Neither gets a forecast."""
+    a, b = f.side_a_player_id, f.side_b_player_id
+    return list(session.scalars(
+        select(Fixture.id).where(
+            Fixture.source_id == f.source_id, Fixture.id != f.id, Fixture.status != "cancelled",
+            Fixture.discipline == f.discipline, Fixture.scheduled_date == f.scheduled_date,
+            or_((Fixture.side_a_player_id == a) & (Fixture.side_b_player_id == b),
+                (Fixture.side_a_player_id == b) & (Fixture.side_b_player_id == a)),
+        )
+    ))  # fmt: skip
 
 
 def verify(session: Session, fixture_id: int, by: str) -> Fixture:
@@ -118,29 +127,14 @@ def is_verified(f: Fixture) -> bool:
 
 
 def canonical(session: Session, player_id: int) -> int:
-    """The player a (possibly merged) id belongs to now."""
-    for _ in range(5):  # merge chains are one hop (ADR-0003); a few more never hurt
-        merged = session.scalar(select(Player.merged_into_id).where(Player.id == player_id))
-        if merged is None:
-            break
-        player_id = merged
-    return player_id
-
-
-def player_of(session: Session, source_player_id: int) -> int:
-    linked = session.scalar(
-        select(PlayerLink.player_id).where(PlayerLink.source_player_id == source_player_id)
-    )
-    if linked is None:
-        raise ValueError(
-            f"source player {source_player_id} is not linked"
-        )  # never: linked on creation
-    return canonical(session, linked)
+    """The player a (possibly merged) id belongs to now: merges keep chains one hop (ADR-0003)."""
+    merged = session.scalar(select(Player.merged_into_id).where(Player.id == player_id))
+    return merged or player_id
 
 
 def resolved(session: Session, source_player_id: int, run_id: int, discipline: str) -> int | None:
     """The rated BWF player a fixture player is, or None. Only a person's identity decision can
     attach a fixture player to a rated record (`scout identity link-fixture-player`)."""
-    pid = player_of(session, source_player_id)
+    pid = identity.player_of(session, source_player_id)  # links always point at the kept player
     rated = session.get(RatingCurrent, (run_id, f"bwf:{discipline}", pid))
     return pid if rated is not None else None

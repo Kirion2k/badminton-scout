@@ -1,7 +1,9 @@
 """One pass of the fixture pipeline (ADR-0014): fetch, store, issue forecasts, reconcile
 outcomes, report. A provider failure is recorded with its class and nothing is issued."""
 
+import re
 from collections import Counter
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -39,26 +41,39 @@ def sync(
         run.counts = report["failure"] = {"class": type(e).__name__, "detail": str(e)}
         session.flush()
         return report
-    fixtures = [store.upsert(session, run, row, entered_by) for row in rows]
+    now = session.execute(select(func.now())).scalar_one()
+    future = [r for r in rows if r.retrieved_at > now + timedelta(minutes=5)]
+    # a check time in the future would keep a fixture "fresh" until then: never accepted
+    report["rejected"] = [f"line {r.line}: {r.reason}" for r in rejected] + [
+        f"{r.key}: checked_at is in the future" for r in future
+    ]
+    stored = [store.upsert(session, run, row, entered_by) for row in rows if row not in future]
+    fixtures = [f for f in stored if f is not None]
     report["fixtures"] = len(fixtures)
-    report["rejected"] = [f"line {r.line}: {r.reason}" for r in rejected]
+    report["older_readings_ignored"] = len(stored) - len(fixtures)
     issued, refused = 0, Counter[str]()
     if issue:
+        forecast = set(session.scalars(select(IssuedPrediction.fixture_id)))
         for f in fixtures:
-            if f.status != "scheduled":
+            if f.status != "scheduled" or f.id in forecast:
                 continue
             try:
                 with session.begin_nested():
                     prospective.issue_for_fixture(session, f.id)
                 issued += 1
             except prospective.NotEligible as e:
-                refused[str(e).split(":")[0]] += 1
+                refused[_category(str(e))] += 1
                 _refused(session, f, str(e))
     report.update(issued=issued, refused=dict(refused), voided=prospective.reconcile(session))
     run.status, run.finished_at = "succeeded", func.now()
     run.counts = {k: v for k, v in report.items() if k != "run"}
     session.flush()
     return report
+
+
+def _category(reason: str) -> str:
+    """A refusal's kind, without the ids and times that make each message unique."""
+    return re.split(r"[:(]", re.sub(r"\d+", "N", reason))[0].strip()
 
 
 def _refused(session: Session, f: Fixture, reason: str) -> None:
@@ -94,7 +109,7 @@ def status(session: Session) -> dict[str, Any]:
                                                    ForecastEvent.kind == "refused")
                 .order_by(ForecastEvent.id.desc()).limit(1)
             )  # fmt: skip
-            reasons[(last or "never considered").split(":")[0]] += 1
+            reasons[_category(last or "never considered")] += 1
         out[source] = {
             "last_success": next((r.finished_at for r in runs if r.status == "succeeded"), None),
             "failures": Counter(r.counts.get("class", "?") for r in runs if r.status == "failed"),
