@@ -227,8 +227,9 @@ export interface components {
   schemas: {
     /**
      * Calibration
-     * @description How such forecasts did in the held-out test period: the reliability bin this forecast
-     *     falls in, so the number comes with its track record.
+     * @description How such forecasts did in the prospective evaluation, from the favourite's side: of the
+     *     forecasts that gave the favourite between `bin_lo` and `bin_hi`, the favourite won
+     *     `observed_rate`.
      */
     Calibration: {
       /** Bin Hi */

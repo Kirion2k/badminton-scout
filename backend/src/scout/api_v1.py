@@ -1101,6 +1101,8 @@ def tournament_matches(
 # Known limits per provider: descriptive text, shown beside the derived status.
 # imported once from files, never fetched: an archive, not a connection
 FILE_SOURCES = frozenset({"bwf_historical_compilation"})
+# entered by hand for forecasts before play (ADR-0014); nothing from it is shown as results
+MANUAL_SOURCES = frozenset({"bwf_curated"})
 
 _LIMITATIONS: dict[str, list[str]] = {
     "bwf_historical_compilation": [
@@ -1126,6 +1128,12 @@ _LIMITATIONS: dict[str, list[str]] = {
         "are not imported.",
     ],
     "bwf": ["Authorised; waiting for BWF's technical access method (API, feed or allowlist)."],
+    "bwf_curated": [
+        "Upcoming BWF singles fixtures and results entered by hand from bwfbadminton.com, a "
+        "stopgap until BWF provides a feed.",
+        "Used only to record Mynton's forecasts before play and check them afterwards; these "
+        "fixtures and results are not shown on Mynton, and no forecast is published.",
+    ],
     "tournamentsoftware_bwf": ["Authorised; needs provider-issued login credentials."],
 }
 
@@ -1137,6 +1145,8 @@ def _status(source_id: str, stored: int, recent_runs: list[str]) -> ProviderStat
 
     if source_id in FILE_SOURCES:
         return "historical_archive" if stored > 0 else "pending_access"
+    if source_id in MANUAL_SOURCES:
+        return "partially_validated"  # a manual bridge: never described as a connection
     if len(recent_runs) >= 3 and "succeeded" not in recent_runs[:10]:
         return "source_error"
     if stored > 0:
@@ -1150,7 +1160,10 @@ def _status(source_id: str, stored: int, recent_runs: list[str]) -> ProviderStat
 def coverage(db: DB) -> Coverage:
     """Per provider: derived status and counts. Public counts include served data only."""
     # every authorised provider with hosts, in registry order: the global integration tracker
-    listed = [sid for sid, rights in SOURCES.items() if rights.hosts or sid in FILE_SOURCES]
+    listed = [
+        sid for sid, rights in SOURCES.items()
+        if rights.hosts or sid in FILE_SOURCES | MANUAL_SOURCES
+    ]  # fmt: skip
     sources = {s.id: s for s in db.scalars(select(Source).where(Source.id.in_(listed)))}
 
     def per_source(query: Any) -> dict[str, Any]:

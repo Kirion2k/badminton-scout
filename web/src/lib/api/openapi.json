@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "Calibration": {
-        "description": "How such forecasts did in the held-out test period: the reliability bin this forecast\nfalls in, so the number comes with its track record.",
+        "description": "How such forecasts did in the prospective evaluation, from the favourite's side: of the\nforecasts that gave the favourite between `bin_lo` and `bin_hi`, the favourite won\n`observed_rate`.",
         "properties": {
           "bin_hi": {
             "title": "Bin Hi",

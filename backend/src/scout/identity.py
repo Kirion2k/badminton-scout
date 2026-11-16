@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from scout.fixtures.providers import FIXTURE_SOURCES
 from scout.models import IdentityCandidate, IdentityDecision, Player, PlayerLink, SourcePlayer
 
 
@@ -52,7 +53,7 @@ def _links(session: Session, player_ids: list[int]) -> dict[str, Any]:
     }
 
 
-def _player_of(session: Session, source_player_id: int) -> int:
+def player_of(session: Session, source_player_id: int) -> int:
     player = session.scalar(
         select(PlayerLink.player_id).where(PlayerLink.source_player_id == source_player_id)
     )
@@ -68,13 +69,16 @@ def merge(
     decided_by: str,
     *,
     allow_deferred: bool = False,
+    keep_b: bool = False,
 ) -> IdentityDecision:
-    """Merge candidate b's player into a's. Reversible with `undo`."""
+    """Merge candidate b's player into a's (a's into b's with `keep_b`). Reversible with `undo`."""
     c = session.get(IdentityCandidate, candidate_id)
     if c is None or c.status not in (("open", "deferred") if allow_deferred else ("open",)):
         raise ValueError(f"candidate {candidate_id} is not open")
-    keep = _player_of(session, c.source_player_a_id)
-    gone = _player_of(session, c.source_player_b_id)
+    keep = player_of(session, c.source_player_a_id)
+    gone = player_of(session, c.source_player_b_id)
+    if keep_b:
+        keep, gone = gone, keep
     if keep == gone:
         raise ValueError("already the same player")
     if any(p and p.withheld_at for p in (session.get(Player, keep), session.get(Player, gone))):
@@ -168,3 +172,45 @@ def undo(session: Session, decision_id: int, reason: str, decided_by: str) -> Id
             c.status, c.decision_id, c.note = "rejected", split.id, f"undone by a person: {reason}"
     session.flush()
     return split
+
+
+def link_fixture_player(
+    session: Session, source_player_id: int, player_id: int, reason: str, decided_by: str
+) -> IdentityDecision:
+    """A person's decision that a fixture provider's player is an existing (rated) player: a
+    candidate plus a merge into that player, so it is audited and can be undone (ADR-0014)."""
+    if not decided_by.strip() or decided_by.startswith(("system", "auto")):
+        raise ValueError("a fixture player is linked by a person")
+    target = session.get(Player, player_id)
+    if target is None or target.merged_into_id is not None or target.withheld_at is not None:
+        raise ValueError(f"player {player_id} is not a current, published player")
+    sp = session.get(SourcePlayer, source_player_id)
+    if sp is None or sp.source_id not in FIXTURE_SOURCES:
+        # other sources' identities go through candidate review (ADR-0003, ADR-0011)
+        raise ValueError(f"source player {source_player_id} is not from a fixture source")
+    own = player_of(session, source_player_id)
+    if own == player_id:
+        raise ValueError("already linked to that player")
+    if session.scalar(select(func.count()).select_from(PlayerLink)
+                      .where(PlayerLink.player_id == own)) != 1:  # fmt: skip
+        # its record already holds other identities: merging it would merge two people
+        raise ValueError(f"source player {source_player_id} is already linked: undo that first")
+    other = session.scalar(
+        select(func.min(PlayerLink.source_player_id)).where(PlayerLink.player_id == player_id)
+    )
+    if other is None:
+        raise ValueError(f"player {player_id} has no source records")
+    a, b = sorted((source_player_id, other))
+    c = session.scalar(
+        select(IdentityCandidate).filter_by(source_player_a_id=a, source_player_b_id=b)
+    )
+    if c is None:
+        c = IdentityCandidate(source_player_a_id=a, source_player_b_id=b, rule="fixture_link")
+        session.add(c)
+        session.flush()
+    elif c.status == "accepted":
+        raise ValueError(f"candidate {c.id} for this pair is already accepted")
+    else:  # a new decision by a person reopens an earlier rejection or deferral
+        c.status, c.decision_id = "open", None
+    # keep the existing player: the fixture player's empty record is the one merged away
+    return merge(session, c.id, reason, decided_by, keep_b=other == b)

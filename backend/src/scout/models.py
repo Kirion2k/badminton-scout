@@ -533,9 +533,72 @@ class RatingCurrent(Base):
     identity_flagged: Mapped[bool] = mapped_column(server_default="false")
 
 
+FIXTURE_STATUSES = ("scheduled", "postponed", "live", "completed", "walkover", "retired",
+                    "abandoned", "cancelled")  # fmt: skip
+
+
+class Fixture(Base):
+    """A match announced by a fixture provider, in its current state (ADR-0014). Every change is
+    a new revision of `raw_record_id`; `revision_id` is the one this row reflects."""
+
+    __tablename__ = "fixture"
+    __table_args__ = (
+        UniqueConstraint("source_id", "source_key"),
+        CheckConstraint("discipline IN ('MS', 'WS')", name="discipline_valid"),
+        CheckConstraint(f"status IN {FIXTURE_STATUSES}", name="status_valid"),
+        CheckConstraint("winner_side IN (1, 2)", name="winner_valid"),
+        CheckConstraint("side_a_player_id <> side_b_player_id", name="two_players"),
+        # a result counts only when someone other than the person who entered it checked it
+        CheckConstraint("result_verified_by <> result_entered_by", name="four_eyes"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("source.id"))
+    source_key: Mapped[str] = mapped_column(Text)
+    tournament_key: Mapped[str] = mapped_column(Text)
+    tournament_name: Mapped[str] = mapped_column(Text)
+    discipline: Mapped[str] = mapped_column(String(2))
+    round: Mapped[str | None] = mapped_column(Text)
+    scheduled_start: Mapped[datetime | None]
+    scheduled_date: Mapped[date]
+    timezone: Mapped[str] = mapped_column(Text)  # IANA, e.g. Asia/Tokyo
+    status: Mapped[str] = mapped_column(String(16))
+    side_a_player_id: Mapped[int] = mapped_column(ForeignKey("source_player.id"))
+    side_b_player_id: Mapped[int] = mapped_column(ForeignKey("source_player.id"))
+    winner_side: Mapped[int | None] = mapped_column(SmallInteger)
+    score: Mapped[str | None] = mapped_column(Text)
+    retrieved_at: Mapped[datetime]  # when the source was last checked for this fixture
+    first_seen_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    raw_record_id: Mapped[int] = mapped_column(ForeignKey("raw_record.id"))
+    revision_id: Mapped[int] = mapped_column(ForeignKey("raw_record_revision.id"))
+    result_entered_by: Mapped[str | None] = mapped_column(Text)
+    result_verified_by: Mapped[str | None] = mapped_column(Text)
+    result_verified_at: Mapped[datetime | None]
+    result_verified_revision_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_record_revision.id")
+    )
+
+
+class ForecastEvent(Base):
+    """Append-only audit of void, conflicting and refused forecasts (ADR-0014)."""
+
+    __tablename__ = "forecast_event"
+    __table_args__ = (
+        CheckConstraint("kind IN ('void', 'conflict', 'refused')", name="kind_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    kind: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(Text)
+    fixture_id: Mapped[int] = mapped_column(ForeignKey("fixture.id"))
+    fixture_revision_id: Mapped[int] = mapped_column(ForeignKey("raw_record_revision.id"))
+    prediction_id: Mapped[int | None] = mapped_column(ForeignKey("issued_prediction.id"))
+
+
 class IssuedPrediction(Base):
-    """A forecast recorded before its match is played (ADR-0013). A trigger forbids changing
-    or deleting it; the result columns are filled once."""
+    """A forecast recorded before its fixture's cutoff (ADR-0013, ADR-0014). A trigger forbids
+    any change or delete; the outcome comes from the fixture."""
 
     __tablename__ = "issued_prediction"
     __table_args__ = (
@@ -563,7 +626,6 @@ class IssuedPrediction(Base):
     run_id: Mapped[int] = mapped_column(ForeignKey("rating_run.id"))
     snapshot_id: Mapped[int] = mapped_column(ForeignKey("rating_snapshot.id"))
     snapshot_hash: Mapped[str] = mapped_column(Text)
-    a_won: Mapped[bool | None]
-    resolved_at: Mapped[datetime | None]
-    resolved_match_id: Mapped[int | None] = mapped_column(BigInteger)
-    verified_by: Mapped[str | None] = mapped_column(Text)
+    fixture_id: Mapped[int] = mapped_column(ForeignKey("fixture.id"), unique=True)
+    fixture_revision_id: Mapped[int] = mapped_column(ForeignKey("raw_record_revision.id"))
+    cutoff_at: Mapped[datetime]  # the latest moment it could be issued, from that revision
